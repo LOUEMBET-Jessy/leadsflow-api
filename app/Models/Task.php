@@ -10,87 +10,109 @@ class Task extends Model
     use HasFactory;
 
     protected $fillable = [
+        'lead_id',
+        'user_id',
         'title',
         'description',
-        'due_date',
         'priority',
         'status',
-        'assigned_to_user_id',
-        'created_by_user_id',
-        'lead_id',
-        'completion_date',
+        'due_date',
+        'completed_at',
+        'completion_notes',
         'reminders',
     ];
 
     protected $casts = [
         'due_date' => 'datetime',
-        'completion_date' => 'datetime',
+        'completed_at' => 'datetime',
         'reminders' => 'array',
     ];
 
-    /**
-     * Get the user assigned to the task.
-     */
-    public function assignedTo()
-    {
-        return $this->belongsTo(User::class, 'assigned_to_user_id');
-    }
-
-    /**
-     * Get the user who created the task.
-     */
-    public function createdBy()
-    {
-        return $this->belongsTo(User::class, 'created_by_user_id');
-    }
-
-    /**
-     * Get the lead for the task.
-     */
+    // Relations
     public function lead()
     {
         return $this->belongsTo(Lead::class);
     }
 
-    /**
-     * Scope a query to only include tasks by status.
-     */
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    // Scopes
     public function scopeByStatus($query, $status)
     {
         return $query->where('status', $status);
     }
 
-    /**
-     * Scope a query to only include tasks by priority.
-     */
     public function scopeByPriority($query, $priority)
     {
         return $query->where('priority', $priority);
     }
 
-    /**
-     * Scope a query to only include tasks by assigned user.
-     */
-    public function scopeByAssignedUser($query, $userId)
-    {
-        return $query->where('assigned_to_user_id', $userId);
-    }
-
-    /**
-     * Scope a query to only include overdue tasks.
-     */
     public function scopeOverdue($query)
     {
         return $query->where('due_date', '<', now())
-                    ->where('status', '!=', 'completed');
+                    ->whereIn('status', ['EnCours', 'Retard']);
     }
 
-    /**
-     * Scope a query to only include tasks due today.
-     */
     public function scopeDueToday($query)
     {
         return $query->whereDate('due_date', today())
-                    ->where('status', '!=', 'completed');
+                    ->whereIn('status', ['EnCours', 'Retard']);
+    }
+
+    public function scopeDueThisWeek($query)
+    {
+        return $query->whereBetween('due_date', [now()->startOfWeek(), now()->endOfWeek()])
+                    ->whereIn('status', ['EnCours', 'Retard']);
+    }
+
+    // Méthodes utilitaires
+    public function isOverdue()
+    {
+        return $this->due_date < now() && in_array($this->status, ['EnCours', 'Retard']);
+    }
+
+    public function isCompleted()
+    {
+        return $this->status === 'Complete';
+    }
+
+    public function isCancelled()
+    {
+        return $this->status === 'Cancelled';
+    }
+
+    public function getPriorityColorAttribute()
+    {
+        return match($this->priority) {
+            'low' => '#27ae60',
+            'medium' => '#f39c12',
+            'high' => '#e67e22',
+            'urgent' => '#e74c3c',
+            default => '#95a5a6'
+        };
+    }
+
+    public function getStatusColorAttribute()
+    {
+        return match($this->status) {
+            'EnCours' => '#3498db',
+            'Retard' => '#e74c3c',
+            'Complete' => '#27ae60',
+            'Cancelled' => '#95a5a6',
+            default => '#95a5a6'
+        };
+    }
+
+    public function getDaysUntilDueAttribute()
+    {
+        return $this->due_date->diffInDays(now(), false);
+    }
+
+    public function getIsUrgentAttribute()
+    {
+        return $this->priority === 'urgent' || $this->isOverdue();
     }
 }

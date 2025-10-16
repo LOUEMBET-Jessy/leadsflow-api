@@ -2,162 +2,162 @@
 
 namespace Database\Seeders;
 
-use App\Models\Lead;
-use App\Models\LeadStatus;
-use App\Models\PipelineStage;
-use App\Models\User;
 use Illuminate\Database\Seeder;
-use Carbon\Carbon;
+use App\Models\Lead;
+use App\Models\Account;
+use App\Models\Stage;
+use App\Models\User;
 
 class LeadSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
-        $statuses = LeadStatus::all();
-        $stages = PipelineStage::all();
-        $users = User::all();
+        $account = Account::first();
+        $salesPipeline = $account->pipelines()->where('name', 'Pipeline de Vente Principal')->first();
+        $marketingPipeline = $account->pipelines()->where('name', 'Pipeline Marketing')->first();
 
-        $sources = ['Web Form', 'Email', 'LinkedIn', 'Referral', 'Cold Call', 'Event', 'Social Media'];
-        $priorities = ['Hot', 'Warm', 'Cold'];
-        $industries = ['Technology', 'Finance', 'Healthcare', 'Manufacturing', 'Retail', 'Education', 'Real Estate'];
-        $companySizes = ['Small', 'Medium', 'Large'];
+        $stages = $salesPipeline->stages()->get();
+        $marketingStages = $marketingPipeline->stages()->get();
 
-        $leads = [
+        $users = $account->users()->get();
+
+        // Leads pour le pipeline de vente
+        $salesLeads = [
             [
-                'first_name' => 'Jean',
-                'last_name' => 'Dubois',
-                'email' => 'jean.dubois@techcorp.com',
-                'phone' => '+33123456789',
-                'company' => 'TechCorp Solutions',
-                'title' => 'CEO',
-                'source' => 'LinkedIn',
-                'priority' => 'Hot',
-                'industry' => 'Technology',
-                'company_size' => 'Large',
-                'notes' => 'Très intéressé par notre solution. Budget confirmé pour Q1.',
-                'address' => '123 Avenue des Champs-Élysées',
-                'city' => 'Paris',
-                'country' => 'France',
+                'name' => 'Jean-Claude Mba',
+                'email' => 'jc.mba@entreprise-gabon.com',
+                'phone' => '+241 01 11 22 33',
+                'company' => 'Entreprise Gabon SARL',
+                'status' => 'Nouveau',
+                'source' => 'Site Web',
+                'location' => 'Libreville',
+                'score' => 75,
+                'estimated_value' => 50000,
+                'notes' => 'Prospect intéressé par nos services de gestion de leads',
+                'stage_id' => $stages->where('name', 'Nouveau')->first()->id,
             ],
             [
-                'first_name' => 'Marie',
-                'last_name' => 'Leroy',
-                'email' => 'marie.leroy@financeplus.fr',
-                'phone' => '+33987654321',
-                'company' => 'Finance Plus',
-                'title' => 'Directrice Marketing',
-                'source' => 'Web Form',
-                'priority' => 'Warm',
-                'industry' => 'Finance',
-                'company_size' => 'Medium',
-                'notes' => 'Demande de démonstration. Intéressée par les fonctionnalités d\'automatisation.',
-                'address' => '456 Rue de la Paix',
-                'city' => 'Lyon',
-                'country' => 'France',
+                'name' => 'Marie Nguema',
+                'email' => 'marie.nguema@oil-company.ga',
+                'phone' => '+241 01 22 33 44',
+                'company' => 'Oil Company Gabon',
+                'status' => 'Contacté',
+                'source' => 'Recommandation',
+                'location' => 'Port-Gentil',
+                'score' => 85,
+                'estimated_value' => 75000,
+                'notes' => 'Contact établi, très intéressée par notre solution',
+                'stage_id' => $stages->where('name', 'Contacté')->first()->id,
             ],
             [
-                'first_name' => 'Pierre',
-                'last_name' => 'Moreau',
-                'email' => 'pierre.moreau@healthcare.org',
-                'phone' => '+33555666777',
-                'company' => 'Healthcare Systems',
-                'title' => 'IT Director',
-                'source' => 'Email',
-                'priority' => 'Warm',
-                'industry' => 'Healthcare',
-                'company_size' => 'Large',
-                'notes' => 'Évaluation de solutions CRM. Besoin de conformité RGPD.',
-                'address' => '789 Boulevard Saint-Germain',
-                'city' => 'Marseille',
-                'country' => 'France',
+                'name' => 'Pierre Obame',
+                'email' => 'p.obame@mining-gabon.com',
+                'phone' => '+241 01 33 44 55',
+                'company' => 'Mining Gabon',
+                'status' => 'Qualification',
+                'source' => 'Salon professionnel',
+                'location' => 'Franceville',
+                'score' => 90,
+                'estimated_value' => 100000,
+                'notes' => 'Qualifié, budget confirmé, décision prévue dans 2 semaines',
+                'stage_id' => $stages->where('name', 'Qualification')->first()->id,
             ],
             [
-                'first_name' => 'Sophie',
-                'last_name' => 'Petit',
-                'email' => 'sophie.petit@retailco.com',
-                'phone' => '+33444555666',
-                'company' => 'RetailCo',
-                'title' => 'Sales Manager',
-                'source' => 'Referral',
-                'priority' => 'Cold',
-                'industry' => 'Retail',
-                'company_size' => 'Small',
-                'notes' => 'Recommandé par un client existant. Premier contact prévu la semaine prochaine.',
-                'address' => '321 Rue du Commerce',
-                'city' => 'Toulouse',
-                'country' => 'France',
+                'name' => 'Fatou Diallo',
+                'email' => 'fatou.diallo@bank-gabon.ga',
+                'phone' => '+241 01 44 55 66',
+                'company' => 'Bank Gabon',
+                'status' => 'Négociation',
+                'source' => 'Email marketing',
+                'location' => 'Libreville',
+                'score' => 95,
+                'estimated_value' => 150000,
+                'notes' => 'En négociation finale, contrat en préparation',
+                'stage_id' => $stages->where('name', 'Négociation')->first()->id,
             ],
             [
-                'first_name' => 'Antoine',
-                'last_name' => 'Rousseau',
-                'email' => 'antoine.rousseau@manufacturing.fr',
-                'phone' => '+33333444555',
-                'company' => 'Manufacturing Pro',
-                'title' => 'Operations Director',
-                'source' => 'Cold Call',
-                'priority' => 'Hot',
-                'industry' => 'Manufacturing',
-                'company_size' => 'Large',
-                'notes' => 'Urgent besoin de digitalisation des processus. Budget important disponible.',
-                'address' => '654 Avenue Industrielle',
-                'city' => 'Lille',
-                'country' => 'France',
+                'name' => 'Alain Moussavou',
+                'email' => 'a.moussavou@telecom-gabon.com',
+                'phone' => '+241 01 55 66 77',
+                'company' => 'Telecom Gabon',
+                'status' => 'Gagné',
+                'source' => 'Site Web',
+                'location' => 'Libreville',
+                'score' => 100,
+                'estimated_value' => 200000,
+                'notes' => 'Contrat signé, projet en cours de déploiement',
+                'stage_id' => $stages->where('name', 'Gagné')->first()->id,
             ],
         ];
 
-        foreach ($leads as $index => $leadData) {
-            $status = $statuses->random();
-            $stage = $stages->random();
-            $assignedUser = $users->where('role.name', '!=', 'admin')->random();
-            $createdUser = $users->random();
+        foreach ($salesLeads as $leadData) {
+            $stageId = $leadData['stage_id'];
+            unset($leadData['stage_id']);
 
-            Lead::create([
-                ...$leadData,
-                'status_id' => $status->id,
-                'pipeline_stage_id' => $stage->id,
-                'assigned_to_user_id' => $assignedUser->id,
-                'created_by_user_id' => $createdUser->id,
-                'score' => rand(20, 90),
-                'last_contact_date' => Carbon::now()->subDays(rand(0, 30)),
-                'created_at' => Carbon::now()->subDays(rand(0, 60)),
-                'updated_at' => Carbon::now()->subDays(rand(0, 7)),
+            $lead = Lead::create([
+                'account_id' => $account->id,
+                'current_stage_id' => $stageId,
+                ...$leadData
+            ]);
+
+            // Assigner le lead à un utilisateur aléatoire
+            $randomUser = $users->random();
+            $lead->assignedUsers()->attach($randomUser->id, [
+                'assigned_at' => now(),
+                'assigned_by_user_id' => $users->first()->id,
+                'notes' => 'Assigné automatiquement'
             ]);
         }
 
-        // Create additional random leads
-        for ($i = 0; $i < 20; $i++) {
-            $status = $statuses->random();
-            $stage = $stages->random();
-            $assignedUser = $users->where('role.name', '!=', 'admin')->random();
-            $createdUser = $users->random();
+        // Leads pour le pipeline marketing
+        $marketingLeads = [
+            [
+                'name' => 'Sarah Bongo',
+                'email' => 'sarah.bongo@startup-gabon.com',
+                'phone' => '+241 01 66 77 88',
+                'company' => 'Startup Gabon',
+                'status' => 'Chaud',
+                'source' => 'Réseaux sociaux',
+                'location' => 'Libreville',
+                'score' => 80,
+                'estimated_value' => 25000,
+                'notes' => 'Lead chaud du marketing, très engagé',
+                'stage_id' => $marketingStages->where('name', 'Lead Marketing')->first()->id,
+            ],
+            [
+                'name' => 'David Mba',
+                'email' => 'david.mba@consulting-gabon.com',
+                'phone' => '+241 01 77 88 99',
+                'company' => 'Consulting Gabon',
+                'status' => 'Froid',
+                'source' => 'Google Ads',
+                'location' => 'Port-Gentil',
+                'score' => 30,
+                'estimated_value' => 15000,
+                'notes' => 'Lead froid, nécessite du nurturing',
+                'stage_id' => $marketingStages->where('name', 'Lead Marketing')->first()->id,
+            ],
+        ];
 
-            Lead::create([
-                'first_name' => fake('fr_FR')->firstName(),
-                'last_name' => fake('fr_FR')->lastName(),
-                'email' => fake()->unique()->safeEmail(),
-                'phone' => fake()->phoneNumber(),
-                'company' => fake('fr_FR')->company(),
-                'title' => fake('fr_FR')->jobTitle(),
-                'source' => fake()->randomElement($sources),
-                'priority' => fake()->randomElement($priorities),
-                'industry' => fake()->randomElement($industries),
-                'company_size' => fake()->randomElement($companySizes),
-                'notes' => fake('fr_FR')->paragraph(),
-                'address' => fake('fr_FR')->streetAddress(),
-                'city' => fake('fr_FR')->city(),
-                'country' => 'France',
-                'status_id' => $status->id,
-                'pipeline_stage_id' => $stage->id,
-                'assigned_to_user_id' => $assignedUser->id,
-                'created_by_user_id' => $createdUser->id,
-                'score' => rand(10, 95),
-                'last_contact_date' => Carbon::now()->subDays(rand(0, 30)),
-                'created_at' => Carbon::now()->subDays(rand(0, 90)),
-                'updated_at' => Carbon::now()->subDays(rand(0, 14)),
+        foreach ($marketingLeads as $leadData) {
+            $stageId = $leadData['stage_id'];
+            unset($leadData['stage_id']);
+
+            $lead = Lead::create([
+                'account_id' => $account->id,
+                'current_stage_id' => $stageId,
+                ...$leadData
             ]);
+
+            // Assigner le lead à un utilisateur marketing
+            $marketingUser = $users->where('role', 'Marketing')->first();
+            if ($marketingUser) {
+                $lead->assignedUsers()->attach($marketingUser->id, [
+                    'assigned_at' => now(),
+                    'assigned_by_user_id' => $users->first()->id,
+                    'notes' => 'Assigné au marketing'
+                ]);
+            }
         }
     }
 }

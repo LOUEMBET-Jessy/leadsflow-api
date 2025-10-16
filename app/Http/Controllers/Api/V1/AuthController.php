@@ -5,15 +5,12 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Auth\LoginRequest;
 use App\Http\Requests\Api\V1\Auth\RegisterRequest;
-use App\Http\Requests\Api\V1\Auth\ForgotPasswordRequest;
-use App\Http\Requests\Api\V1\Auth\ResetPasswordRequest;
+use App\Models\Account;
 use App\Models\User;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Password;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -23,19 +20,32 @@ class AuthController extends Controller
      */
     public function register(RegisterRequest $request): JsonResponse
     {
+        // Créer ou récupérer le compte
+        $account = Account::firstOrCreate(
+            ['slug' => $request->account_slug],
+            [
+                'name' => $request->account_name,
+                'plan' => 'free',
+                'is_active' => true,
+            ]
+        );
+
+        // Créer l'utilisateur
         $user = User::create([
+            'account_id' => $account->id,
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role_id' => $request->role_id ?? 3, // Default to sales role
+            'role' => $request->role ?? 'Commercial',
         ]);
 
-        // Pour l'instant, on retourne un token simple
+        // Générer un token simple
         $token = base64_encode($user->id . '|' . time());
 
         return response()->json([
             'message' => 'User registered successfully',
-            'user' => $user,
+            'user' => $user->load('account'),
+            'account' => $account,
             'token' => $token,
         ], 201);
     }
@@ -52,12 +62,15 @@ class AuthController extends Controller
         }
 
         $user = Auth::user();
-        // Pour l'instant, on retourne un token simple
         $token = base64_encode($user->id . '|' . time());
+
+        // Mettre à jour la dernière connexion
+        $user->update(['last_login_at' => now()]);
 
         return response()->json([
             'message' => 'Login successful',
-            'user' => $user,
+            'user' => $user->load('account'),
+            'account' => $user->account,
             'token' => $token,
         ]);
     }
@@ -67,9 +80,21 @@ class AuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
-        // Pour l'instant, on simule la déconnexion
+        Auth::logout();
+        
         return response()->json([
             'message' => 'Logout successful',
+        ]);
+    }
+
+    /**
+     * Get current user
+     */
+    public function user(Request $request): JsonResponse
+    {
+        return response()->json([
+            'user' => $request->user()->load('account'),
+            'account' => $request->user()->account,
         ]);
     }
 
@@ -79,7 +104,6 @@ class AuthController extends Controller
     public function refresh(Request $request): JsonResponse
     {
         $user = $request->user();
-        // Pour l'instant, on génère un nouveau token simple
         $token = base64_encode($user->id . '|' . time());
 
         return response()->json([
@@ -89,101 +113,51 @@ class AuthController extends Controller
     }
 
     /**
-     * Get authenticated user
+     * Update user profile
      */
-    public function user(Request $request): JsonResponse
-    {
-        return response()->json([
-            'user' => $request->user()->load(['role', 'team', 'currentTeam']),
-        ]);
-    }
-
-    /**
-     * Forgot password
-     */
-    public function forgotPassword(ForgotPasswordRequest $request): JsonResponse
-    {
-        $status = Password::sendResetLink($request->only('email'));
-
-        if ($status === Password::RESET_LINK_SENT) {
-            return response()->json([
-                'message' => 'Password reset link sent to your email',
-            ]);
-        }
-
-        throw ValidationException::withMessages([
-            'email' => [__($status)],
-        ]);
-    }
-
-    /**
-     * Reset password
-     */
-    public function resetPassword(ResetPasswordRequest $request): JsonResponse
-    {
-        $status = Password::reset(
-            $request->only('email', 'password', 'password_confirmation', 'token'),
-            function ($user, $password) {
-                $user->forceFill([
-                    'password' => Hash::make($password)
-                ])->save();
-            }
-        );
-
-        if ($status === Password::PASSWORD_RESET) {
-            return response()->json([
-                'message' => 'Password reset successfully',
-            ]);
-        }
-
-        throw ValidationException::withMessages([
-            'email' => [__($status)],
-        ]);
-    }
-
-    /**
-     * Enable 2FA
-     */
-    public function enable2FA(Request $request): JsonResponse
+    public function updateProfile(Request $request): JsonResponse
     {
         $user = $request->user();
         
-        // Generate 2FA secret (you would use a proper 2FA library like Google2FA)
-        $secret = 'TOTP_SECRET_' . bin2hex(random_bytes(16));
-        
-        $user->update(['two_factor_secret' => $secret]);
+        $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'phone' => 'sometimes|nullable|string|max:20',
+            'avatar' => 'sometimes|nullable|string|max:255',
+            'settings' => 'sometimes|array',
+        ]);
+
+        $user->update($request->only(['name', 'phone', 'avatar', 'settings']));
 
         return response()->json([
-            'message' => '2FA enabled successfully',
-            'secret' => $secret, // In production, this should be sent via QR code
+            'message' => 'Profile updated successfully',
+            'user' => $user->load('account'),
         ]);
     }
 
     /**
-     * Disable 2FA
+     * Change password
      */
-    public function disable2FA(Request $request): JsonResponse
-    {
-        $request->user()->update(['two_factor_secret' => null]);
-
-        return response()->json([
-            'message' => '2FA disabled successfully',
-        ]);
-    }
-
-    /**
-     * Verify 2FA code
-     */
-    public function verify2FA(Request $request): JsonResponse
+    public function changePassword(Request $request): JsonResponse
     {
         $request->validate([
-            'code' => 'required|string|size:6',
+            'current_password' => 'required|string',
+            'password' => 'required|string|min:8|confirmed',
         ]);
 
-        // In production, you would verify the TOTP code here
-        // For now, we'll just return success
+        $user = $request->user();
+
+        if (!Hash::check($request->current_password, $user->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => ['The current password is incorrect.'],
+            ]);
+        }
+
+        $user->update([
+            'password' => Hash::make($request->password),
+        ]);
+
         return response()->json([
-            'message' => '2FA code verified successfully',
+            'message' => 'Password changed successfully',
         ]);
     }
 }

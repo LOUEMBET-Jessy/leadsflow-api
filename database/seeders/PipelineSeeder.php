@@ -2,106 +2,60 @@
 
 namespace Database\Seeders;
 
-use App\Models\Pipeline;
-use App\Models\PipelineStage;
-use App\Models\User;
 use Illuminate\Database\Seeder;
+use App\Models\Pipeline;
+use App\Models\Stage;
+use App\Models\Account;
 
 class PipelineSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
-        // Get first admin user or create one
-        $admin = User::whereHas('role', function ($query) {
-            $query->where('name', 'admin');
-        })->first();
+        $account = Account::first();
 
-        if (!$admin) {
-            $admin = User::first();
-        }
-
-        // Create default pipeline
-        $pipeline = Pipeline::create([
-            'name' => 'Pipeline de Vente Standard',
-            'description' => 'Pipeline par défaut pour la gestion des leads',
-            'is_default' => true,
-            'created_by_user_id' => $admin->id,
+        // Pipeline de vente principal
+        $salesPipeline = Pipeline::create([
+            'account_id' => $account->id,
+            'name' => 'Pipeline de Vente Principal',
+            'description' => 'Pipeline principal pour la gestion des prospects commerciaux',
+            'is_active' => true,
+            'sort_order' => 1,
         ]);
 
-        // Create pipeline stages
+        // Étapes du pipeline de vente
         $stages = [
-            [
-                'name' => 'Premier Contact',
-                'order' => 1,
-                'color_code' => '#3B82F6',
-            ],
-            [
-                'name' => 'Découverte',
-                'order' => 2,
-                'color_code' => '#8B5CF6',
-            ],
-            [
-                'name' => 'Proposition',
-                'order' => 3,
-                'color_code' => '#F59E0B',
-            ],
-            [
-                'name' => 'Négociation',
-                'order' => 4,
-                'color_code' => '#EF4444',
-            ],
-            [
-                'name' => 'Fermeture',
-                'order' => 5,
-                'color_code' => '#10B981',
-            ],
+            ['name' => 'Nouveau', 'color' => '#3498db', 'order' => 1, 'is_final' => false],
+            ['name' => 'Contacté', 'color' => '#f39c12', 'order' => 2, 'is_final' => false],
+            ['name' => 'Qualification', 'color' => '#e67e22', 'order' => 3, 'is_final' => false],
+            ['name' => 'Négociation', 'color' => '#e74c3c', 'order' => 4, 'is_final' => false],
+            ['name' => 'Gagné', 'color' => '#27ae60', 'order' => 5, 'is_final' => true],
+            ['name' => 'Perdu', 'color' => '#95a5a6', 'order' => 6, 'is_final' => true],
         ];
 
-        foreach ($stages as $stage) {
-            PipelineStage::create([
-                'pipeline_id' => $pipeline->id,
-                'name' => $stage['name'],
-                'order' => $stage['order'],
-                'color_code' => $stage['color_code'],
-            ]);
+        foreach ($stages as $stageData) {
+            $salesPipeline->stages()->create($stageData);
         }
 
-        // Create additional pipeline for marketing
+        // Pipeline marketing
         $marketingPipeline = Pipeline::create([
+            'account_id' => $account->id,
             'name' => 'Pipeline Marketing',
-            'description' => 'Pipeline spécialisé pour les leads marketing',
-            'is_default' => false,
-            'created_by_user_id' => $admin->id,
+            'description' => 'Pipeline pour les leads marketing et les campagnes',
+            'is_active' => true,
+            'sort_order' => 2,
         ]);
 
+        // Étapes du pipeline marketing
         $marketingStages = [
-            [
-                'name' => 'Lead Généré',
-                'order' => 1,
-                'color_code' => '#3B82F6',
-            ],
-            [
-                'name' => 'Qualifié Marketing',
-                'order' => 2,
-                'color_code' => '#8B5CF6',
-            ],
-            [
-                'name' => 'Transmis Commercial',
-                'order' => 3,
-                'color_code' => '#F59E0B',
-            ],
+            ['name' => 'Lead Marketing', 'color' => '#9b59b6', 'order' => 1, 'is_final' => false],
+            ['name' => 'Qualifié', 'color' => '#f39c12', 'order' => 2, 'is_final' => false],
+            ['name' => 'Nurturing', 'color' => '#e67e22', 'order' => 3, 'is_final' => false],
+            ['name' => 'Prêt pour Vente', 'color' => '#27ae60', 'order' => 4, 'is_final' => true],
+            ['name' => 'Non Qualifié', 'color' => '#95a5a6', 'order' => 5, 'is_final' => true],
         ];
 
-        foreach ($marketingStages as $stage) {
-            PipelineStage::create([
-                'pipeline_id' => $marketingPipeline->id,
-                'name' => $stage['name'],
-                'order' => $stage['order'],
-                'color_code' => $stage['color_code'],
-            ]);
+        foreach ($marketingStages as $stageData) {
+            $marketingPipeline->stages()->create($stageData);
         }
     }
 }

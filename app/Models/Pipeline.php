@@ -10,37 +10,59 @@ class Pipeline extends Model
     use HasFactory;
 
     protected $fillable = [
+        'account_id',
         'name',
         'description',
-        'is_default',
-        'created_by_user_id',
+        'is_active',
+        'sort_order',
     ];
 
     protected $casts = [
-        'is_default' => 'boolean',
+        'is_active' => 'boolean',
     ];
 
-    /**
-     * Get the user who created the pipeline.
-     */
-    public function createdBy()
+    // Relations
+    public function account()
     {
-        return $this->belongsTo(User::class, 'created_by_user_id');
+        return $this->belongsTo(Account::class);
     }
 
-    /**
-     * Get the stages for the pipeline.
-     */
     public function stages()
     {
-        return $this->hasMany(PipelineStage::class)->orderBy('order');
+        return $this->hasMany(Stage::class)->orderBy('order');
     }
 
-    /**
-     * Get the leads for the pipeline.
-     */
     public function leads()
     {
-        return $this->hasManyThrough(Lead::class, PipelineStage::class);
+        return $this->hasManyThrough(Lead::class, Stage::class);
+    }
+
+    // Scopes
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    public function scopeOrdered($query)
+    {
+        return $query->orderBy('sort_order');
+    }
+
+    // Méthodes utilitaires
+    public function getTotalLeadsAttribute()
+    {
+        return $this->leads()->count();
+    }
+
+    public function getConversionRateAttribute()
+    {
+        $totalLeads = $this->leads()->count();
+        if ($totalLeads === 0) return 0;
+
+        $wonLeads = $this->leads()->whereHas('currentStage', function ($query) {
+            $query->where('is_final', true)->where('name', 'like', '%Gagné%');
+        })->count();
+
+        return round(($wonLeads / $totalLeads) * 100, 2);
     }
 }

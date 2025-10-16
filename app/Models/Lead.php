@@ -10,127 +10,147 @@ class Lead extends Model
     use HasFactory;
 
     protected $fillable = [
-        'first_name',
-        'last_name',
+        'account_id',
+        'current_stage_id',
+        'name',
         'email',
         'phone',
         'company',
-        'title',
+        'status',
         'source',
-        'status_id',
-        'pipeline_stage_id',
-        'assigned_to_user_id',
+        'location',
         'score',
-        'priority',
-        'last_contact_date',
+        'estimated_value',
         'notes',
-        'address',
-        'city',
-        'country',
-        'industry',
-        'company_size',
         'custom_fields',
-        'created_by_user_id',
+        'last_contact_at',
     ];
 
     protected $casts = [
-        'last_contact_date' => 'datetime',
         'custom_fields' => 'array',
+        'last_contact_at' => 'datetime',
+        'estimated_value' => 'decimal:2',
     ];
 
-    /**
-     * Get the user assigned to the lead.
-     */
-    public function assignedTo()
+    // Relations
+    public function account()
     {
-        return $this->belongsTo(User::class, 'assigned_to_user_id');
+        return $this->belongsTo(Account::class);
     }
 
-    /**
-     * Get the user who created the lead.
-     */
-    public function createdBy()
+    public function currentStage()
     {
-        return $this->belongsTo(User::class, 'created_by_user_id');
+        return $this->belongsTo(Stage::class, 'current_stage_id');
     }
 
-    /**
-     * Get the status of the lead.
-     */
-    public function status()
+    public function assignedUsers()
     {
-        return $this->belongsTo(LeadStatus::class, 'status_id');
+        return $this->belongsToMany(User::class, 'lead_assignments')
+                    ->withPivot('assigned_at', 'assigned_by_user_id', 'notes')
+                    ->withTimestamps();
     }
 
-    /**
-     * Get the pipeline stage of the lead.
-     */
-    public function pipelineStage()
-    {
-        return $this->belongsTo(PipelineStage::class);
-    }
-
-    /**
-     * Get the tasks for the lead.
-     */
-    public function tasks()
-    {
-        return $this->hasMany(Task::class);
-    }
-
-    /**
-     * Get the interactions for the lead.
-     */
     public function interactions()
     {
-        return $this->hasMany(Interaction::class)->orderBy('interaction_date', 'desc');
+        return $this->hasMany(Interaction::class)->orderBy('date', 'desc');
     }
 
-    /**
-     * Get the AI insights for the lead.
-     */
-    public function aiInsights()
+    public function tasks()
     {
-        return $this->hasMany(AiInsight::class);
+        return $this->hasMany(Task::class)->orderBy('due_date');
     }
 
-    /**
-     * Get the full name of the lead.
-     */
-    public function getFullNameAttribute()
+    // Scopes
+    public function scopeByStatus($query, $status)
     {
-        return $this->first_name . ' ' . $this->last_name;
+        return $query->where('status', $status);
     }
 
-    /**
-     * Scope a query to only include leads by status.
-     */
-    public function scopeByStatus($query, $statusId)
-    {
-        return $query->where('status_id', $statusId);
-    }
-
-    /**
-     * Scope a query to only include leads by priority.
-     */
-    public function scopeByPriority($query, $priority)
-    {
-        return $query->where('priority', $priority);
-    }
-
-    /**
-     * Scope a query to only include leads by assigned user.
-     */
-    public function scopeByAssignedUser($query, $userId)
-    {
-        return $query->where('assigned_to_user_id', $userId);
-    }
-
-    /**
-     * Scope a query to only include leads by source.
-     */
     public function scopeBySource($query, $source)
     {
         return $query->where('source', $source);
+    }
+
+    public function scopeByStage($query, $stageId)
+    {
+        return $query->where('current_stage_id', $stageId);
+    }
+
+    public function scopeHighScore($query, $minScore = 80)
+    {
+        return $query->where('score', '>=', $minScore);
+    }
+
+    public function scopeRecent($query, $days = 7)
+    {
+        return $query->where('created_at', '>=', now()->subDays($days));
+    }
+
+    public function scopeAssignedTo($query, $userId)
+    {
+        return $query->whereHas('assignedUsers', function ($q) use ($userId) {
+            $q->where('user_id', $userId);
+        });
+    }
+
+    // Méthodes utilitaires
+    public function isHot()
+    {
+        return $this->status === 'Chaud' || $this->score >= 80;
+    }
+
+    public function isCold()
+    {
+        return $this->status === 'Froid' || $this->score <= 30;
+    }
+
+    public function isWon()
+    {
+        return $this->status === 'Gagné';
+    }
+
+    public function isLost()
+    {
+        return $this->status === 'Perdu';
+    }
+
+    public function getStatusColorAttribute()
+    {
+        return match($this->status) {
+            'Nouveau' => '#3498db',
+            'Contacté' => '#f39c12',
+            'Qualification' => '#e67e22',
+            'Négociation' => '#e74c3c',
+            'Gagné' => '#27ae60',
+            'Perdu' => '#95a5a6',
+            'Chaud' => '#e74c3c',
+            'Froid' => '#3498db',
+            'A_recontacter' => '#f39c12',
+            'Non_qualifié' => '#95a5a6',
+            default => '#95a5a6'
+        };
+    }
+
+    public function getLastInteractionAttribute()
+    {
+        return $this->interactions()->first();
+    }
+
+    public function getOpenTasksCountAttribute()
+    {
+        return $this->tasks()->whereIn('status', ['EnCours', 'Retard'])->count();
+    }
+
+    public function getOverdueTasksCountAttribute()
+    {
+        return $this->tasks()->where('status', 'Retard')->count();
+    }
+
+    public function getDaysSinceLastContactAttribute()
+    {
+        if (!$this->last_contact_at) {
+            return $this->created_at->diffInDays(now());
+        }
+        return $this->last_contact_at->diffInDays(now());
     }
 }

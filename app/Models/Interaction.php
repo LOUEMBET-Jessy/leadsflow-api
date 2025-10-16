@@ -13,54 +13,83 @@ class Interaction extends Model
         'lead_id',
         'user_id',
         'type',
+        'subject',
         'summary',
         'details',
-        'interaction_date',
-        'attachments',
+        'date',
+        'duration',
+        'outcome',
+        'metadata',
     ];
 
     protected $casts = [
-        'interaction_date' => 'datetime',
-        'attachments' => 'array',
+        'date' => 'datetime',
+        'metadata' => 'array',
     ];
 
-    /**
-     * Get the lead for the interaction.
-     */
+    // Relations
     public function lead()
     {
         return $this->belongsTo(Lead::class);
     }
 
-    /**
-     * Get the user who created the interaction.
-     */
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * Scope a query to only include interactions by type.
-     */
+    // Scopes
     public function scopeByType($query, $type)
     {
         return $query->where('type', $type);
     }
 
-    /**
-     * Scope a query to only include interactions by user.
-     */
-    public function scopeByUser($query, $userId)
+    public function scopeByOutcome($query, $outcome)
     {
-        return $query->where('user_id', $userId);
+        return $query->where('outcome', $outcome);
     }
 
-    /**
-     * Scope a query to only include interactions by date range.
-     */
-    public function scopeByDateRange($query, $startDate, $endDate)
+    public function scopeRecent($query, $days = 30)
     {
-        return $query->whereBetween('interaction_date', [$startDate, $endDate]);
+        return $query->where('date', '>=', now()->subDays($days));
+    }
+
+    // Méthodes utilitaires
+    public function getTypeIconAttribute()
+    {
+        return match($this->type) {
+            'Email' => '📧',
+            'Appel' => '📞',
+            'Reunion' => '🤝',
+            'Note' => '📝',
+            'SMS' => '💬',
+            'Chat' => '💭',
+            default => '📝'
+        };
+    }
+
+    public function getOutcomeColorAttribute()
+    {
+        return match($this->outcome) {
+            'positive' => '#27ae60',
+            'neutral' => '#f39c12',
+            'negative' => '#e74c3c',
+            'follow_up_required' => '#3498db',
+            default => '#95a5a6'
+        };
+    }
+
+    public function getFormattedDurationAttribute()
+    {
+        if (!$this->duration) return null;
+        
+        $hours = floor($this->duration / 60);
+        $minutes = $this->duration % 60;
+        
+        if ($hours > 0) {
+            return $hours . 'h ' . $minutes . 'min';
+        }
+        
+        return $minutes . 'min';
     }
 }

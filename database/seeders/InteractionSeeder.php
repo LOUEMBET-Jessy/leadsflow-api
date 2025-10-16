@@ -2,94 +2,118 @@
 
 namespace Database\Seeders;
 
+use Illuminate\Database\Seeder;
 use App\Models\Interaction;
 use App\Models\Lead;
 use App\Models\User;
-use Illuminate\Database\Seeder;
-use Carbon\Carbon;
 
 class InteractionSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
         $leads = Lead::all();
         $users = User::all();
 
-        $interactionTypes = ['email_sent', 'email_received', 'call', 'meeting', 'note', 'status_change'];
+        $interactionTypes = ['Email', 'Appel', 'Reunion', 'Note', 'SMS'];
+        $outcomes = ['positive', 'neutral', 'negative', 'follow_up_required'];
 
-        $interactionTemplates = [
-            'email_sent' => [
-                'summary' => 'Email envoyé',
-                'details' => 'Email de suivi envoyé au client avec les informations demandées.',
-            ],
-            'email_received' => [
-                'summary' => 'Email reçu',
-                'details' => 'Réponse du client à notre proposition.',
-            ],
-            'call' => [
-                'summary' => 'Appel téléphonique',
-                'details' => 'Appel avec le client pour discuter de ses besoins.',
-            ],
-            'meeting' => [
-                'summary' => 'Réunion',
-                'details' => 'Réunion en présentiel ou visioconférence avec le client.',
-            ],
-            'note' => [
-                'summary' => 'Note interne',
-                'details' => 'Note ajoutée par l\'équipe commerciale.',
-            ],
-            'status_change' => [
-                'summary' => 'Changement de statut',
-                'details' => 'Le statut du lead a été modifié.',
-            ],
-        ];
-
-        // Create interactions for each lead
         foreach ($leads as $lead) {
-            $interactionCount = rand(2, 8);
-            $assignedUser = $lead->assignedTo ?? $users->random();
-
+            // Créer 2-5 interactions par lead
+            $interactionCount = rand(2, 5);
+            
             for ($i = 0; $i < $interactionCount; $i++) {
-                $type = fake()->randomElement($interactionTypes);
-                $template = $interactionTemplates[$type];
-                $interactionDate = Carbon::now()->subDays(rand(0, 60));
-
-                Interaction::create([
+                $type = $interactionTypes[array_rand($interactionTypes)];
+                $user = $users->random();
+                $outcome = $outcomes[array_rand($outcomes)];
+                
+                $interaction = Interaction::create([
                     'lead_id' => $lead->id,
-                    'user_id' => $assignedUser->id,
+                    'user_id' => $user->id,
                     'type' => $type,
-                    'summary' => $template['summary'],
-                    'details' => $template['details'],
-                    'interaction_date' => $interactionDate,
-                    'attachments' => fake()->boolean(20) ? ['document.pdf', 'image.jpg'] : null,
-                    'created_at' => $interactionDate,
-                    'updated_at' => $interactionDate,
+                    'subject' => $this->getSubjectForType($type, $lead),
+                    'summary' => $this->getSummaryForType($type, $lead),
+                    'details' => $this->getDetailsForType($type, $lead),
+                    'date' => now()->subDays(rand(0, 30))->subHours(rand(0, 23)),
+                    'duration' => $type === 'Appel' || $type === 'Reunion' ? rand(15, 120) : null,
+                    'outcome' => $outcome,
+                    'metadata' => $this->getMetadataForType($type),
                 ]);
+
+                // Mettre à jour la dernière interaction du lead
+                if ($interaction->date > $lead->last_contact_at) {
+                    $lead->update(['last_contact_at' => $interaction->date]);
+                }
             }
         }
+    }
 
-        // Create additional random interactions
-        for ($i = 0; $i < 30; $i++) {
-            $lead = $leads->random();
-            $user = $users->random();
-            $type = fake()->randomElement($interactionTypes);
-            $template = $interactionTemplates[$type];
-            $interactionDate = Carbon::now()->subDays(rand(0, 90));
+    private function getSubjectForType($type, $lead)
+    {
+        return match($type) {
+            'Email' => "Email de suivi - {$lead->name}",
+            'Appel' => "Appel téléphonique - {$lead->company}",
+            'Reunion' => "Réunion de présentation - {$lead->name}",
+            'Note' => "Note de suivi - {$lead->name}",
+            'SMS' => "SMS de rappel - {$lead->name}",
+            default => "Interaction avec {$lead->name}"
+        };
+    }
 
-            Interaction::create([
-                'lead_id' => $lead->id,
-                'user_id' => $user->id,
-                'type' => $type,
-                'summary' => $template['summary'],
-                'details' => $template['details'],
-                'interaction_date' => $interactionDate,
-                'attachments' => fake()->boolean(15) ? ['document.pdf'] : null,
-                'created_at' => $interactionDate,
-                'updated_at' => $interactionDate,
-            ]);
-        }
+    private function getSummaryForType($type, $lead)
+    {
+        return match($type) {
+            'Email' => "Email envoyé pour présenter nos services de gestion de leads",
+            'Appel' => "Appel effectué pour qualifier le besoin et présenter notre solution",
+            'Reunion' => "Réunion de présentation de notre plateforme LeadFlow",
+            'Note' => "Note de suivi sur l'avancement du prospect",
+            'SMS' => "SMS de rappel pour la prochaine étape",
+            default => "Interaction avec le prospect {$lead->name}"
+        };
+    }
+
+    private function getDetailsForType($type, $lead)
+    {
+        return match($type) {
+            'Email' => "Email détaillé présentant les fonctionnalités de LeadFlow, les avantages pour {$lead->company}, et les prochaines étapes. Le prospect semble intéressé par notre solution de gestion de leads.",
+            'Appel' => "Appel téléphonique de 30 minutes avec {$lead->name}. Discussion sur les besoins de {$lead->company} en matière de gestion de leads. Le prospect a confirmé son intérêt et souhaite une démonstration.",
+            'Reunion' => "Réunion de présentation d'une heure avec l'équipe de {$lead->company}. Démonstration complète de LeadFlow, questions-réponses, et discussion sur l'implémentation. Très bonne réception de la part de l'équipe.",
+            'Note' => "Le prospect {$lead->name} de {$lead->company} progresse bien dans le processus. Budget confirmé, décision prévue dans 2 semaines. Prochaine étape : envoi de la proposition commerciale.",
+            'SMS' => "SMS de rappel envoyé pour confirmer la réunion de demain. Le prospect a confirmé sa présence.",
+            default => "Interaction avec {$lead->name} de {$lead->company}"
+        };
+    }
+
+    private function getMetadataForType($type)
+    {
+        return match($type) {
+            'Email' => [
+                'template_used' => 'presentation_email',
+                'opened' => true,
+                'clicked' => true,
+                'attachments' => ['presentation.pdf', 'brochure.pdf']
+            ],
+            'Appel' => [
+                'call_duration' => rand(15, 120),
+                'call_quality' => 'good',
+                'recording_available' => false
+            ],
+            'Reunion' => [
+                'meeting_type' => 'presentation',
+                'attendees' => rand(2, 5),
+                'presentation_used' => 'leadflow_demo.pptx',
+                'follow_up_scheduled' => true
+            ],
+            'Note' => [
+                'note_type' => 'follow_up',
+                'priority' => 'medium',
+                'tags' => ['important', 'follow_up']
+            ],
+            'SMS' => [
+                'sms_provider' => 'twilio',
+                'delivered' => true,
+                'read' => true
+            ],
+            default => []
+        };
     }
 }

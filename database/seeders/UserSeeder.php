@@ -2,140 +2,80 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-use App\Models\Role;
-use App\Models\Team;
 use Illuminate\Database\Seeder;
+use App\Models\User;
+use App\Models\Account;
 use Illuminate\Support\Facades\Hash;
 
 class UserSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
-        // Get roles
-        $adminRole = Role::where('name', 'admin')->first();
-        $managerRole = Role::where('name', 'manager')->first();
-        $salesRole = Role::where('name', 'sales')->first();
-        $marketingRole = Role::where('name', 'marketing')->first();
+        $account = Account::first();
 
-        // Get teams
-        $commercialTeam = Team::where('name', 'Équipe Commerciale')->first();
-        $marketingTeam = Team::where('name', 'Équipe Marketing')->first();
-        $managementTeam = Team::where('name', 'Équipe Management')->first();
+        // Admin user
+        User::create([
+            'account_id' => $account->id,
+            'name' => 'Admin AGL',
+            'email' => 'admin@agl-gabon.com',
+            'password' => Hash::make('password123'),
+            'role' => 'Admin',
+            'phone' => '+241 01 23 45 67',
+            'is_active' => true,
+        ]);
 
-        $users = [
-            [
-                'name' => 'Admin LeadFlow',
-                'email' => 'admin@leadflow.com',
-                'password' => Hash::make('password'),
-                'role_id' => $adminRole->id,
-                'team_id' => $managementTeam->id,
-                'current_team_id' => $managementTeam->id,
-                'settings' => [
-                    'notifications' => [
-                        'email_notifications' => true,
-                        'push_notifications' => true,
-                        'lead_assigned' => true,
-                        'lead_status_changed' => true,
-                        'task_due' => true,
-                        'task_overdue' => true,
-                        'new_message' => true,
-                        'weekly_summary' => true,
-                        'monthly_report' => true,
-                    ]
-                ]
-            ],
-            [
-                'name' => 'Jean Dupont',
-                'email' => 'jean.dupont@leadflow.com',
-                'password' => Hash::make('password'),
-                'role_id' => $managerRole->id,
-                'team_id' => $commercialTeam->id,
-                'current_team_id' => $commercialTeam->id,
-                'settings' => [
-                    'notifications' => [
-                        'email_notifications' => true,
-                        'push_notifications' => true,
-                        'lead_assigned' => true,
-                        'lead_status_changed' => true,
-                        'task_due' => true,
-                        'task_overdue' => true,
-                        'new_message' => true,
-                        'weekly_summary' => true,
-                        'monthly_report' => true,
-                    ]
-                ]
-            ],
-            [
-                'name' => 'Marie Martin',
-                'email' => 'marie.martin@leadflow.com',
-                'password' => Hash::make('password'),
-                'role_id' => $salesRole->id,
-                'team_id' => $commercialTeam->id,
-                'current_team_id' => $commercialTeam->id,
-                'settings' => [
-                    'notifications' => [
-                        'email_notifications' => true,
-                        'push_notifications' => true,
-                        'lead_assigned' => true,
-                        'lead_status_changed' => true,
-                        'task_due' => true,
-                        'task_overdue' => true,
-                        'new_message' => true,
-                        'weekly_summary' => true,
-                        'monthly_report' => false,
-                    ]
-                ]
-            ],
-            [
-                'name' => 'Pierre Durand',
-                'email' => 'pierre.durand@leadflow.com',
-                'password' => Hash::make('password'),
-                'role_id' => $salesRole->id,
-                'team_id' => $commercialTeam->id,
-                'current_team_id' => $commercialTeam->id,
-                'settings' => [
-                    'notifications' => [
-                        'email_notifications' => true,
-                        'push_notifications' => false,
-                        'lead_assigned' => true,
-                        'lead_status_changed' => true,
-                        'task_due' => true,
-                        'task_overdue' => true,
-                        'new_message' => true,
-                        'weekly_summary' => true,
-                        'monthly_report' => false,
-                    ]
-                ]
-            ],
-            [
-                'name' => 'Sophie Bernard',
-                'email' => 'sophie.bernard@leadflow.com',
-                'password' => Hash::make('password'),
-                'role_id' => $marketingRole->id,
-                'team_id' => $marketingTeam->id,
-                'current_team_id' => $marketingTeam->id,
-                'settings' => [
-                    'notifications' => [
-                        'email_notifications' => true,
-                        'push_notifications' => true,
-                        'lead_assigned' => false,
-                        'lead_status_changed' => false,
-                        'task_due' => true,
-                        'task_overdue' => true,
-                        'new_message' => true,
-                        'weekly_summary' => true,
-                        'monthly_report' => true,
-                    ]
-                ]
-            ],
-        ];
+        // Manager user
+        User::create([
+            'account_id' => $account->id,
+            'name' => 'Manager Commercial',
+            'email' => 'manager@agl-gabon.com',
+            'password' => Hash::make('password123'),
+            'role' => 'Manager',
+            'phone' => '+241 01 23 45 68',
+            'is_active' => true,
+        ]);
 
-        foreach ($users as $userData) {
-            User::create($userData);
-        }
+        // Commercial users
+        User::create([
+            'account_id' => $account->id,
+            'name' => 'Jean Dupont',
+            'email' => 'jean.dupont@agl-gabon.com',
+            'password' => Hash::make('password123'),
+            'role' => 'Commercial',
+            'phone' => '+241 01 23 45 69',
+            'is_active' => true,
+        ]);
+
+        User::create([
+            'account_id' => $account->id,
+            'name' => 'Marie Martin',
+            'email' => 'marie.martin@agl-gabon.com',
+            'password' => Hash::make('password123'),
+            'role' => 'Commercial',
+            'phone' => '+241 01 23 45 70',
+            'is_active' => true,
+        ]);
+
+        // Marketing user
+        User::create([
+            'account_id' => $account->id,
+            'name' => 'Sophie Marketing',
+            'email' => 'sophie@agl-gabon.com',
+            'password' => Hash::make('password123'),
+            'role' => 'Marketing',
+            'phone' => '+241 01 23 45 71',
+            'is_active' => true,
+        ]);
+
+        // GestLead user
+        User::create([
+            'account_id' => $account->id,
+            'name' => 'Paul GestLead',
+            'email' => 'paul@agl-gabon.com',
+            'password' => Hash::make('password123'),
+            'role' => 'GestLead',
+            'phone' => '+241 01 23 45 72',
+            'is_active' => true,
+        ]);
     }
 }

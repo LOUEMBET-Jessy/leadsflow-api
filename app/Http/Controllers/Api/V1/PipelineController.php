@@ -6,43 +6,63 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Pipeline\StorePipelineRequest;
 use App\Http\Requests\Api\V1\Pipeline\UpdatePipelineRequest;
 use App\Models\Pipeline;
-use App\Models\PipelineStage;
-use Illuminate\Http\Request;
+use App\Models\Stage;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class PipelineController extends Controller
 {
     /**
-     * Display a listing of pipelines
+     * Get all pipelines for the account
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $pipelines = Pipeline::with(['stages', 'createdBy'])
-            ->orderBy('is_default', 'desc')
-            ->orderBy('created_at', 'desc')
+        $pipelines = Pipeline::where('account_id', $request->user()->account_id)
+            ->with(['stages' => function ($query) {
+                $query->orderBy('order');
+            }])
+            ->orderBy('sort_order')
             ->get();
 
-        return response()->json([
-            'pipelines' => $pipelines
-        ]);
+        return response()->json(['pipelines' => $pipelines]);
     }
 
     /**
-     * Store a newly created pipeline
+     * Get a specific pipeline
+     */
+    public function show(Request $request, Pipeline $pipeline): JsonResponse
+    {
+        // Vérifier que le pipeline appartient au compte
+        if ($pipeline->account_id !== $request->user()->account_id) {
+            return response()->json(['message' => 'Pipeline not found'], 404);
+        }
+
+        $pipeline->load(['stages' => function ($query) {
+            $query->orderBy('order');
+        }]);
+
+        return response()->json(['pipeline' => $pipeline]);
+    }
+
+    /**
+     * Create a new pipeline
      */
     public function store(StorePipelineRequest $request): JsonResponse
     {
-        // If this is set as default, unset other defaults
-        if ($request->is_default) {
-            Pipeline::where('is_default', true)->update(['is_default' => false]);
-        }
-
         $pipeline = Pipeline::create([
-            ...$request->validated(),
-            'created_by_user_id' => $request->user()->id,
+            'account_id' => $request->user()->account_id,
+            'name' => $request->name,
+            'description' => $request->description,
+            'is_active' => $request->is_active ?? true,
+            'sort_order' => $request->sort_order ?? 0,
         ]);
 
-        $pipeline->load(['stages', 'createdBy']);
+        // Créer les étapes par défaut si spécifiées
+        if ($request->has('default_stages') && $request->default_stages) {
+            $this->createDefaultStages($pipeline);
+        }
+
+        $pipeline->load('stages');
 
         return response()->json([
             'message' => 'Pipeline created successfully',
@@ -51,33 +71,18 @@ class PipelineController extends Controller
     }
 
     /**
-     * Display the specified pipeline
-     */
-    public function show(Pipeline $pipeline): JsonResponse
-    {
-        $pipeline->load(['stages' => function ($query) {
-            $query->orderBy('order');
-        }, 'createdBy']);
-
-        return response()->json([
-            'pipeline' => $pipeline
-        ]);
-    }
-
-    /**
-     * Update the specified pipeline
+     * Update a pipeline
      */
     public function update(UpdatePipelineRequest $request, Pipeline $pipeline): JsonResponse
     {
-        // If this is set as default, unset other defaults
-        if ($request->is_default) {
-            Pipeline::where('is_default', true)
-                ->where('id', '!=', $pipeline->id)
-                ->update(['is_default' => false]);
+        // Vérifier que le pipeline appartient au compte
+        if ($pipeline->account_id !== $request->user()->account_id) {
+            return response()->json(['message' => 'Pipeline not found'], 404);
         }
 
         $pipeline->update($request->validated());
-        $pipeline->load(['stages', 'createdBy']);
+
+        $pipeline->load('stages');
 
         return response()->json([
             'message' => 'Pipeline updated successfully',
@@ -86,15 +91,21 @@ class PipelineController extends Controller
     }
 
     /**
-     * Remove the specified pipeline
+     * Delete a pipeline
      */
-    public function destroy(Pipeline $pipeline): JsonResponse
+    public function destroy(Request $request, Pipeline $pipeline): JsonResponse
     {
-        // Check if pipeline has leads
-        if ($pipeline->leads()->count() > 0) {
+        // Vérifier que le pipeline appartient au compte
+        if ($pipeline->account_id !== $request->user()->account_id) {
+            return response()->json(['message' => 'Pipeline not found'], 404);
+        }
+
+        // Vérifier qu'il n'y a pas de leads dans ce pipeline
+        $leadsCount = $pipeline->leads()->count();
+        if ($leadsCount > 0) {
             return response()->json([
-                'message' => 'Cannot delete pipeline with existing leads',
-            ], 422);
+                'message' => "Cannot delete pipeline with {$leadsCount} leads. Please reassign leads first.",
+            ], 400);
         }
 
         $pipeline->delete();
@@ -105,144 +116,90 @@ class PipelineController extends Controller
     }
 
     /**
-     * Get pipeline stages
+     * Get pipeline statistics
      */
-    public function stages(Pipeline $pipeline): JsonResponse
+    public function stats(Request $request, Pipeline $pipeline): JsonResponse
     {
-        $stages = $pipeline->stages()->orderBy('order')->get();
-
-        return response()->json([
-            'stages' => $stages
-        ]);
-    }
-
-    /**
-     * Add stage to pipeline
-     */
-    public function addStage(Request $request, Pipeline $pipeline): JsonResponse
-    {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'color_code' => 'nullable|string|max:7',
-            'order' => 'nullable|integer|min:0',
-        ]);
-
-        $order = $request->order ?? $pipeline->stages()->max('order') + 1;
-
-        $stage = $pipeline->stages()->create([
-            'name' => $request->name,
-            'color_code' => $request->color_code ?? '#0066CC',
-            'order' => $order,
-        ]);
-
-        return response()->json([
-            'message' => 'Stage added successfully',
-            'stage' => $stage,
-        ], 201);
-    }
-
-    /**
-     * Update pipeline stage
-     */
-    public function updateStage(Request $request, Pipeline $pipeline, PipelineStage $stage): JsonResponse
-    {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'color_code' => 'nullable|string|max:7',
-            'order' => 'nullable|integer|min:0',
-        ]);
-
-        $stage->update($request->only(['name', 'color_code', 'order']));
-
-        return response()->json([
-            'message' => 'Stage updated successfully',
-            'stage' => $stage,
-        ]);
-    }
-
-    /**
-     * Remove pipeline stage
-     */
-    public function removeStage(Pipeline $pipeline, PipelineStage $stage): JsonResponse
-    {
-        // Check if stage has leads
-        if ($stage->leads()->count() > 0) {
-            return response()->json([
-                'message' => 'Cannot delete stage with existing leads',
-            ], 422);
+        // Vérifier que le pipeline appartient au compte
+        if ($pipeline->account_id !== $request->user()->account_id) {
+            return response()->json(['message' => 'Pipeline not found'], 404);
         }
 
-        $stage->delete();
+        $stats = [
+            'total_leads' => $pipeline->leads()->count(),
+            'by_stage' => $pipeline->stages()->withCount('leads')->get()->map(function ($stage) {
+                return [
+                    'stage_id' => $stage->id,
+                    'stage_name' => $stage->name,
+                    'leads_count' => $stage->leads_count,
+                ];
+            }),
+            'conversion_rate' => $pipeline->conversion_rate,
+            'average_time_in_pipeline' => $this->getAverageTimeInPipeline($pipeline),
+        ];
 
-        return response()->json([
-            'message' => 'Stage removed successfully',
-        ]);
+        return response()->json(['stats' => $stats]);
     }
 
     /**
-     * Get pipeline view (Kanban)
+     * Reorder pipelines
      */
-    public function pipelineView(Request $request, Pipeline $pipeline): JsonResponse
+    public function reorder(Request $request): JsonResponse
     {
-        $stages = $pipeline->stages()->orderBy('order')->get();
-        
-        $leadsByStage = [];
-        
-        foreach ($stages as $stage) {
-            $leadsQuery = $stage->leads()->with(['status', 'assignedTo', 'createdBy']);
-            
-            // Apply filters if provided
-            if ($request->has('assigned_to_user_id')) {
-                $leadsQuery->where('assigned_to_user_id', $request->assigned_to_user_id);
-            }
-            
-            if ($request->has('priority')) {
-                $leadsQuery->where('priority', $request->priority);
-            }
-            
-            if ($request->has('search')) {
-                $search = $request->search;
-                $leadsQuery->where(function ($q) use ($search) {
-                    $q->where('first_name', 'like', "%{$search}%")
-                      ->orWhere('last_name', 'like', "%{$search}%")
-                      ->orWhere('email', 'like', "%{$search}%")
-                      ->orWhere('company', 'like', "%{$search}%");
-                });
-            }
-            
-            $leads = $leadsQuery->orderBy('updated_at', 'desc')->get();
-            
-            $leadsByStage[] = [
-                'stage' => $stage,
-                'leads' => $leads,
-                'count' => $leads->count(),
-            ];
+        $request->validate([
+            'pipelines' => 'required|array',
+            'pipelines.*.id' => 'required|exists:pipelines,id',
+            'pipelines.*.sort_order' => 'required|integer',
+        ]);
+
+        foreach ($request->pipelines as $pipelineData) {
+            Pipeline::where('id', $pipelineData['id'])
+                ->where('account_id', $request->user()->account_id)
+                ->update(['sort_order' => $pipelineData['sort_order']]);
         }
 
         return response()->json([
-            'pipeline' => $pipeline,
-            'stages_with_leads' => $leadsByStage,
+            'message' => 'Pipelines reordered successfully',
         ]);
     }
 
     /**
-     * Move lead between stages
+     * Create default stages for a pipeline
      */
-    public function moveLead(Request $request): JsonResponse
+    protected function createDefaultStages(Pipeline $pipeline): void
     {
-        $request->validate([
-            'lead_id' => 'required|exists:leads,id',
-            'stage_id' => 'required|exists:pipeline_stages,id',
-        ]);
+        $defaultStages = [
+            ['name' => 'Nouveau', 'color' => '#3498db', 'order' => 1],
+            ['name' => 'Contacté', 'color' => '#f39c12', 'order' => 2],
+            ['name' => 'Qualification', 'color' => '#e67e22', 'order' => 3],
+            ['name' => 'Négociation', 'color' => '#e74c3c', 'order' => 4],
+            ['name' => 'Gagné', 'color' => '#27ae60', 'order' => 5, 'is_final' => true],
+            ['name' => 'Perdu', 'color' => '#95a5a6', 'order' => 6, 'is_final' => true],
+        ];
 
-        $lead = \App\Models\Lead::findOrFail($request->lead_id);
-        $stage = PipelineStage::findOrFail($request->stage_id);
+        foreach ($defaultStages as $stageData) {
+            $pipeline->stages()->create($stageData);
+        }
+    }
 
-        $lead->update(['pipeline_stage_id' => $stage->id]);
+    /**
+     * Calculate average time in pipeline
+     */
+    protected function getAverageTimeInPipeline(Pipeline $pipeline): ?float
+    {
+        $leads = $pipeline->leads()
+            ->whereNotNull('created_at')
+            ->whereNotNull('updated_at')
+            ->get();
 
-        return response()->json([
-            'message' => 'Lead moved successfully',
-            'lead' => $lead->load(['pipelineStage', 'status', 'assignedTo']),
-        ]);
+        if ($leads->isEmpty()) {
+            return null;
+        }
+
+        $totalDays = $leads->sum(function ($lead) {
+            return $lead->created_at->diffInDays($lead->updated_at);
+        });
+
+        return round($totalDays / $leads->count(), 2);
     }
 }

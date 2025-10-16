@@ -6,295 +6,139 @@ use App\Http\Controllers\Controller;
 use App\Models\Lead;
 use App\Models\Task;
 use App\Models\Interaction;
-use App\Models\AiInsight;
+use App\Models\Pipeline;
+use App\Models\Stage;
 use App\Models\User;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
     /**
-     * Get dashboard summary
+     * Get dashboard overview
      */
-    public function summary(Request $request): JsonResponse
+    public function overview(Request $request): JsonResponse
     {
-        $user = $request->user();
-        $now = Carbon::now();
-        $startOfMonth = $now->copy()->startOfMonth();
-        $startOfYear = $now->copy()->startOfYear();
+        $accountId = $request->user()->account_id;
+        $userId = $request->user()->id;
 
-        // Total leads
-        $totalLeads = Lead::count();
-        $userLeads = Lead::where('assigned_to_user_id', $user->id)->count();
+        // Statistiques générales
+        $stats = [
+            'leads' => [
+                'total' => Lead::where('account_id', $accountId)->count(),
+                'new_today' => Lead::where('account_id', $accountId)
+                    ->whereDate('created_at', today())
+                    ->count(),
+                'assigned_to_me' => Lead::where('account_id', $accountId)
+                    ->whereHas('assignedUsers', function ($q) use ($userId) {
+                        $q->where('user_id', $userId);
+                    })
+                    ->count(),
+            ],
+            'tasks' => [
+                'total' => Task::whereHas('user', function ($q) use ($accountId) {
+                    $q->where('account_id', $accountId);
+                })->count(),
+                'my_tasks' => Task::where('user_id', $userId)->count(),
+                'overdue' => Task::where('user_id', $userId)
+                    ->where('due_date', '<', now())
+                    ->whereIn('status', ['EnCours', 'Retard'])
+                    ->count(),
+                'due_today' => Task::where('user_id', $userId)
+                    ->whereDate('due_date', today())
+                    ->whereIn('status', ['EnCours', 'Retard'])
+                    ->count(),
+            ],
+            'interactions' => [
+                'today' => Interaction::whereHas('lead', function ($q) use ($accountId) {
+                    $q->where('account_id', $accountId);
+                })->whereDate('date', today())->count(),
+                'this_week' => Interaction::whereHas('lead', function ($q) use ($accountId) {
+                    $q->where('account_id', $accountId);
+                })->whereBetween('date', [now()->startOfWeek(), now()->endOfWeek()])->count(),
+            ],
+        ];
 
-        // Conversion rate (leads won / total leads)
-        $wonLeads = Lead::whereHas('status', function ($query) {
-            $query->where('name', 'Gagné');
-        })->count();
-        $conversionRate = $totalLeads > 0 ? round(($wonLeads / $totalLeads) * 100, 2) : 0;
-
-        // Pipeline value (sum of estimated values)
-        $pipelineValue = Lead::whereHas('status', function ($query) {
-            $query->where('is_final', false);
-        })->sum('score'); // Using score as estimated value for now
-
-        // Monthly revenue (leads won this month)
-        $monthlyRevenue = Lead::whereHas('status', function ($query) {
-            $query->where('name', 'Gagné');
-        })->where('updated_at', '>=', $startOfMonth)->sum('score');
-
-        // Recent leads (last 7 days)
-        $recentLeads = Lead::where('created_at', '>=', $now->copy()->subDays(7))->count();
-
-        // Tasks due today
-        $tasksDueToday = Task::where('assigned_to_user_id', $user->id)
-            ->whereDate('due_date', $now->toDateString())
-            ->where('status', '!=', 'completed')
-            ->count();
-
-        // Overdue tasks
-        $overdueTasks = Task::where('assigned_to_user_id', $user->id)
-            ->where('due_date', '<', $now)
-            ->where('status', '!=', 'completed')
-            ->count();
-
-        return response()->json([
-            'summary' => [
-                'total_leads' => $totalLeads,
-                'user_leads' => $userLeads,
-                'conversion_rate' => $conversionRate,
-                'pipeline_value' => $pipelineValue,
-                'monthly_revenue' => $monthlyRevenue,
-                'recent_leads' => $recentLeads,
-                'tasks_due_today' => $tasksDueToday,
-                'overdue_tasks' => $overdueTasks,
-            ]
-        ]);
+        return response()->json(['overview' => $stats]);
     }
 
     /**
-     * Get dashboard charts data
+     * Get leads by status
      */
-    public function charts(Request $request): JsonResponse
+    public function leadsByStatus(Request $request): JsonResponse
     {
-        $period = $request->get('period', 'month'); // month, quarter, year
-        $now = Carbon::now();
+        $accountId = $request->user()->account_id;
 
-        $startDate = match ($period) {
-            'week' => $now->copy()->subWeek(),
-            'month' => $now->copy()->subMonth(),
-            'quarter' => $now->copy()->subQuarter(),
-            'year' => $now->copy()->subYear(),
-            default => $now->copy()->subMonth(),
-        };
+        $leadsByStatus = Lead::where('account_id', $accountId)
+            ->selectRaw('status, count(*) as count')
+            ->groupBy('status')
+            ->get()
+            ->pluck('count', 'status');
 
-        // Leads by source
-        $leadsBySource = Lead::where('created_at', '>=', $startDate)
-            ->select('source', DB::raw('count(*) as count'))
+        return response()->json(['leads_by_status' => $leadsByStatus]);
+    }
+
+    /**
+     * Get leads by source
+     */
+    public function leadsBySource(Request $request): JsonResponse
+    {
+        $accountId = $request->user()->account_id;
+
+        $leadsBySource = Lead::where('account_id', $accountId)
+            ->selectRaw('source, count(*) as count')
+            ->whereNotNull('source')
             ->groupBy('source')
+            ->orderBy('count', 'desc')
             ->get();
 
-        // Leads by status
-        $leadsByStatus = Lead::where('created_at', '>=', $startDate)
-            ->join('lead_statuses', 'leads.status_id', '=', 'lead_statuses.id')
-            ->select('lead_statuses.name as status', DB::raw('count(*) as count'))
-            ->groupBy('lead_statuses.name')
-            ->get();
-
-        // Monthly leads trend
-        $monthlyTrend = Lead::where('created_at', '>=', $startDate)
-            ->select(
-                DB::raw('DATE_FORMAT(created_at, "%Y-%m") as month'),
-                DB::raw('count(*) as count')
-            )
-            ->groupBy('month')
-            ->orderBy('month')
-            ->get();
-
-        // Conversion funnel
-        $conversionFunnel = Lead::where('created_at', '>=', $startDate)
-            ->join('lead_statuses', 'leads.status_id', '=', 'lead_statuses.id')
-            ->select('lead_statuses.name as stage', DB::raw('count(*) as count'))
-            ->groupBy('lead_statuses.name')
-            ->orderBy('lead_statuses.order')
-            ->get();
-
-        return response()->json([
-            'charts' => [
-                'leads_by_source' => $leadsBySource,
-                'leads_by_status' => $leadsByStatus,
-                'monthly_trend' => $monthlyTrend,
-                'conversion_funnel' => $conversionFunnel,
-            ]
-        ]);
+        return response()->json(['leads_by_source' => $leadsBySource]);
     }
 
     /**
-     * Get recent leads
+     * Get pipeline funnel data
      */
-    public function recentLeads(Request $request): JsonResponse
+    public function pipelineFunnel(Request $request): JsonResponse
     {
-        $limit = $request->get('limit', 10);
-        
-        $leads = Lead::with(['status', 'assignedTo', 'pipelineStage'])
-            ->orderBy('created_at', 'desc')
-            ->limit($limit)
-            ->get();
-
-        return response()->json([
-            'leads' => $leads
-        ]);
-    }
-
-    /**
-     * Get daily tasks
-     */
-    public function dailyTasks(Request $request): JsonResponse
-    {
-        $user = $request->user();
-        $now = Carbon::now();
-
-        $tasks = Task::where('assigned_to_user_id', $user->id)
-            ->where(function ($query) use ($now) {
-                $query->whereDate('due_date', $now->toDateString())
-                      ->orWhere('due_date', '<', $now);
-            })
-            ->where('status', '!=', 'completed')
-            ->with(['lead', 'createdBy'])
-            ->orderBy('due_date', 'asc')
-            ->get();
-
-        return response()->json([
-            'tasks' => $tasks
-        ]);
-    }
-
-    /**
-     * Get team performance
-     */
-    public function teamPerformance(Request $request): JsonResponse
-    {
-        $period = $request->get('period', 'month');
-        $now = Carbon::now();
-
-        $startDate = match ($period) {
-            'week' => $now->copy()->subWeek(),
-            'month' => $now->copy()->subMonth(),
-            'quarter' => $now->copy()->subQuarter(),
-            'year' => $now->copy()->subYear(),
-            default => $now->copy()->subMonth(),
-        };
-
-        $teamPerformance = User::withCount([
-            'assignedLeads as total_leads',
-            'assignedLeads as won_leads' => function ($query) {
-                $query->whereHas('status', function ($q) {
-                    $q->where('name', 'Gagné');
-                });
-            },
-            'assignedTasks as completed_tasks' => function ($query) {
-                $query->where('status', 'completed');
-            }
-        ])
-        ->whereHas('assignedLeads', function ($query) use ($startDate) {
-            $query->where('created_at', '>=', $startDate);
-        })
-        ->get()
-        ->map(function ($user) {
-            $conversionRate = $user->total_leads > 0 
-                ? round(($user->won_leads / $user->total_leads) * 100, 2) 
-                : 0;
-
-            return [
-                'user_id' => $user->id,
-                'user_name' => $user->name,
-                'total_leads' => $user->total_leads,
-                'won_leads' => $user->won_leads,
-                'conversion_rate' => $conversionRate,
-                'completed_tasks' => $user->completed_tasks,
-            ];
-        });
-
-        return response()->json([
-            'team_performance' => $teamPerformance
-        ]);
-    }
-
-    /**
-     * Get pipeline overview
-     */
-    public function pipelineOverview(Request $request): JsonResponse
-    {
+        $accountId = $request->user()->account_id;
         $pipelineId = $request->get('pipeline_id');
-        
-        $query = Lead::with(['pipelineStage', 'status']);
-        
+
+        $query = Lead::where('account_id', $accountId)
+            ->join('stages', 'leads.current_stage_id', '=', 'stages.id')
+            ->join('pipelines', 'stages.pipeline_id', '=', 'pipelines.id');
+
         if ($pipelineId) {
-            $query->whereHas('pipelineStage', function ($q) use ($pipelineId) {
-                $q->where('pipeline_id', $pipelineId);
-            });
+            $query->where('pipelines.id', $pipelineId);
         }
 
-        $pipelineOverview = $query->get()
-            ->groupBy('pipelineStage.name')
-            ->map(function ($leads, $stageName) {
-                return [
-                    'stage' => $stageName,
-                    'count' => $leads->count(),
-                    'leads' => $leads->take(5) // Show first 5 leads for preview
-                ];
-            });
+        $funnelData = $query->select(
+            'stages.name as stage_name',
+            'stages.order as stage_order',
+            'pipelines.name as pipeline_name',
+            DB::raw('count(*) as leads_count')
+        )
+        ->groupBy('stages.id', 'stages.name', 'stages.order', 'pipelines.name')
+        ->orderBy('stages.order')
+        ->get();
 
-        return response()->json([
-            'pipeline_overview' => $pipelineOverview
-        ]);
+        return response()->json(['funnel_data' => $funnelData]);
     }
 
     /**
-     * Get AI recommendations
+     * Get recent activities
      */
-    public function aiRecommendations(Request $request): JsonResponse
+    public function recentActivities(Request $request): JsonResponse
     {
-        $user = $request->user();
-        
-        $recommendations = AiInsight::where('user_id', $user->id)
-            ->orWhereNull('user_id') // Global recommendations
-            ->where('type', 'recommendation')
-            ->where('is_read', false)
-            ->with(['lead'])
-            ->orderBy('created_at', 'desc')
-            ->limit(10)
-            ->get();
-
-        return response()->json([
-            'recommendations' => $recommendations
-        ]);
-    }
-
-    /**
-     * Get dashboard stats (alias for summary)
-     */
-    public function stats(Request $request): JsonResponse
-    {
-        return $this->summary($request);
-    }
-
-    /**
-     * Get dashboard activity
-     */
-    public function activity(Request $request): JsonResponse
-    {
-        $user = $request->user();
+        $accountId = $request->user()->account_id;
         $limit = $request->get('limit', 20);
-        
-        // Get recent activities from leads, tasks, and interactions
+
         $activities = collect();
-        
-        // Recent leads
-        $recentLeads = Lead::with(['status', 'assignedTo'])
-            ->where('assigned_to_user_id', $user->id)
+
+        // Leads récents
+        $recentLeads = Lead::where('account_id', $accountId)
+            ->with(['currentStage', 'assignedUsers'])
             ->orderBy('updated_at', 'desc')
             ->limit($limit / 3)
             ->get()
@@ -307,39 +151,43 @@ class DashboardController extends Controller
                     'data' => $lead
                 ];
             });
-        
-        // Recent tasks
-        $recentTasks = Task::with(['lead', 'assignedTo'])
-            ->where('assigned_to_user_id', $user->id)
-            ->orderBy('updated_at', 'desc')
-            ->limit($limit / 3)
-            ->get()
-            ->map(function ($task) {
-                return [
-                    'type' => 'task',
-                    'action' => 'updated',
-                    'description' => "Tâche {$task->title} mise à jour",
-                    'timestamp' => $task->updated_at,
-                    'data' => $task
-                ];
-            });
-        
-        // Recent interactions
-        $recentInteractions = Interaction::with(['lead', 'user'])
-            ->where('user_id', $user->id)
-            ->orderBy('created_at', 'desc')
-            ->limit($limit / 3)
-            ->get()
-            ->map(function ($interaction) {
-                return [
-                    'type' => 'interaction',
-                    'action' => 'created',
-                    'description' => "Interaction {$interaction->type} ajoutée",
-                    'timestamp' => $interaction->created_at,
-                    'data' => $interaction
-                ];
-            });
-        
+
+        // Tâches récentes
+        $recentTasks = Task::whereHas('user', function ($q) use ($accountId) {
+            $q->where('account_id', $accountId);
+        })
+        ->with(['lead', 'user'])
+        ->orderBy('updated_at', 'desc')
+        ->limit($limit / 3)
+        ->get()
+        ->map(function ($task) {
+            return [
+                'type' => 'task',
+                'action' => 'updated',
+                'description' => "Tâche {$task->title} mise à jour",
+                'timestamp' => $task->updated_at,
+                'data' => $task
+            ];
+        });
+
+        // Interactions récentes
+        $recentInteractions = Interaction::whereHas('lead', function ($q) use ($accountId) {
+            $q->where('account_id', $accountId);
+        })
+        ->with(['lead', 'user'])
+        ->orderBy('created_at', 'desc')
+        ->limit($limit / 3)
+        ->get()
+        ->map(function ($interaction) {
+            return [
+                'type' => 'interaction',
+                'action' => 'created',
+                'description' => "Interaction {$interaction->type} ajoutée",
+                'timestamp' => $interaction->created_at,
+                'data' => $interaction
+            ];
+        });
+
         $activities = $activities
             ->merge($recentLeads)
             ->merge($recentTasks)
@@ -347,65 +195,174 @@ class DashboardController extends Controller
             ->sortByDesc('timestamp')
             ->take($limit);
 
-        return response()->json([
-            'activities' => $activities->values()
-        ]);
+        return response()->json(['activities' => $activities->values()]);
     }
 
     /**
-     * Get conversion funnel data
+     * Get team performance
      */
-    public function funnel(Request $request): JsonResponse
+    public function teamPerformance(Request $request): JsonResponse
     {
+        $accountId = $request->user()->account_id;
         $period = $request->get('period', 'month');
-        $now = Carbon::now();
 
         $startDate = match ($period) {
-            'week' => $now->copy()->subWeek(),
-            'month' => $now->copy()->subMonth(),
-            'quarter' => $now->copy()->subQuarter(),
-            'year' => $now->copy()->subYear(),
-            default => $now->copy()->subMonth(),
+            'week' => now()->subWeek(),
+            'month' => now()->subMonth(),
+            'quarter' => now()->subQuarter(),
+            'year' => now()->subYear(),
+            default => now()->subMonth(),
         };
 
-        try {
-            // Get leads by pipeline stage
-            $funnelData = Lead::where('created_at', '>=', $startDate)
-                ->join('pipeline_stages', 'leads.pipeline_stage_id', '=', 'pipeline_stages.id')
-                ->select(
-                    'pipeline_stages.name as stage',
-                    'pipeline_stages.order as stage_order',
-                    DB::raw('count(*) as count')
-                )
-                ->groupBy('pipeline_stages.name', 'pipeline_stages.order')
-                ->orderBy('pipeline_stages.order')
-                ->get();
-
-            // Calculate conversion rates
-            $totalLeads = $funnelData->sum('count');
-            $funnelData = $funnelData->map(function ($stage, $index) use ($totalLeads) {
-                $conversionRate = $totalLeads > 0 ? round(($stage->count / $totalLeads) * 100, 2) : 0;
+        $teamPerformance = User::where('account_id', $accountId)
+            ->withCount([
+                'assignedLeads as leads_count',
+                'interactions as interactions_count',
+                'tasks as tasks_count',
+                'tasks as completed_tasks_count' => function ($query) use ($startDate) {
+                    $query->where('status', 'Complete')
+                          ->where('completed_at', '>=', $startDate);
+                }
+            ])
+            ->get()
+            ->map(function ($user) {
                 return [
-                    'stage' => $stage->stage,
-                    'order' => $stage->stage_order,
-                    'count' => $stage->count,
-                    'conversion_rate' => $conversionRate
+                    'user_id' => $user->id,
+                    'user_name' => $user->name,
+                    'role' => $user->role,
+                    'leads_count' => $user->leads_count,
+                    'interactions_count' => $user->interactions_count,
+                    'tasks_count' => $user->tasks_count,
+                    'completed_tasks_count' => $user->completed_tasks_count,
                 ];
             });
 
-            return response()->json([
-                'funnel' => $funnelData,
-                'total_leads' => $totalLeads,
-                'period' => $period
-            ]);
-        } catch (\Exception $e) {
-            // Fallback: return empty funnel data
-            return response()->json([
-                'funnel' => [],
-                'total_leads' => 0,
-                'period' => $period,
-                'error' => 'Unable to load funnel data'
-            ]);
+        return response()->json(['team_performance' => $teamPerformance]);
+    }
+
+    /**
+     * Get conversion rates
+     */
+    public function conversionRates(Request $request): JsonResponse
+    {
+        $accountId = $request->user()->account_id;
+        $period = $request->get('period', 'month');
+
+        $startDate = match ($period) {
+            'week' => now()->subWeek(),
+            'month' => now()->subMonth(),
+            'quarter' => now()->subQuarter(),
+            'year' => now()->subYear(),
+            default => now()->subMonth(),
+        };
+
+        $conversionRates = Pipeline::where('account_id', $accountId)
+            ->with(['stages' => function ($query) {
+                $query->orderBy('order');
+            }])
+            ->get()
+            ->map(function ($pipeline) use ($startDate) {
+                $totalLeads = $pipeline->leads()
+                    ->where('created_at', '>=', $startDate)
+                    ->count();
+
+                $stages = $pipeline->stages->map(function ($stage) use ($startDate, $totalLeads) {
+                    $stageLeads = $stage->leads()
+                        ->where('created_at', '>=', $startDate)
+                        ->count();
+
+                    return [
+                        'stage_name' => $stage->name,
+                        'leads_count' => $stageLeads,
+                        'conversion_rate' => $totalLeads > 0 ? round(($stageLeads / $totalLeads) * 100, 2) : 0,
+                    ];
+                });
+
+                return [
+                    'pipeline_name' => $pipeline->name,
+                    'total_leads' => $totalLeads,
+                    'stages' => $stages,
+                ];
+            });
+
+        return response()->json(['conversion_rates' => $conversionRates]);
+    }
+
+    /**
+     * Get monthly trends
+     */
+    public function monthlyTrends(Request $request): JsonResponse
+    {
+        $accountId = $request->user()->account_id;
+        $months = $request->get('months', 6);
+
+        $trends = [];
+        for ($i = $months - 1; $i >= 0; $i--) {
+            $date = now()->subMonths($i);
+            $startOfMonth = $date->copy()->startOfMonth();
+            $endOfMonth = $date->copy()->endOfMonth();
+
+            $trends[] = [
+                'month' => $date->format('Y-m'),
+                'month_name' => $date->format('F Y'),
+                'leads_created' => Lead::where('account_id', $accountId)
+                    ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
+                    ->count(),
+                'leads_won' => Lead::where('account_id', $accountId)
+                    ->where('status', 'Gagné')
+                    ->whereBetween('updated_at', [$startOfMonth, $endOfMonth])
+                    ->count(),
+                'interactions' => Interaction::whereHas('lead', function ($q) use ($accountId) {
+                    $q->where('account_id', $accountId);
+                })
+                ->whereBetween('date', [$startOfMonth, $endOfMonth])
+                ->count(),
+            ];
         }
+
+        return response()->json(['monthly_trends' => $trends]);
+    }
+
+    /**
+     * Get top performing sources
+     */
+    public function topSources(Request $request): JsonResponse
+    {
+        $accountId = $request->user()->account_id;
+        $limit = $request->get('limit', 10);
+
+        $topSources = Lead::where('account_id', $accountId)
+            ->selectRaw('source, count(*) as leads_count, avg(score) as avg_score')
+            ->whereNotNull('source')
+            ->groupBy('source')
+            ->orderBy('leads_count', 'desc')
+            ->limit($limit)
+            ->get();
+
+        return response()->json(['top_sources' => $topSources]);
+    }
+
+    /**
+     * Get overdue tasks
+     */
+    public function overdueTasks(Request $request): JsonResponse
+    {
+        $accountId = $request->user()->account_id;
+        $userId = $request->get('user_id');
+
+        $query = Task::whereHas('user', function ($q) use ($accountId) {
+            $q->where('account_id', $accountId);
+        })
+        ->where('due_date', '<', now())
+        ->whereIn('status', ['EnCours', 'Retard'])
+        ->with(['lead', 'user']);
+
+        if ($userId) {
+            $query->where('user_id', $userId);
+        }
+
+        $overdueTasks = $query->orderBy('due_date', 'asc')->get();
+
+        return response()->json(['overdue_tasks' => $overdueTasks]);
     }
 }

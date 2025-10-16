@@ -8,144 +8,103 @@ use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
+        'account_id',
         'name',
         'email',
         'password',
-        'role_id',
-        'team_id',
-        'two_factor_secret',
-        'current_team_id',
-        'profile_photo_path',
+        'role',
+        'phone',
+        'avatar',
         'settings',
+        'is_active',
+        'last_login_at',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
-        'two_factor_secret',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'settings' => 'array',
+            'last_login_at' => 'datetime',
         ];
     }
 
-    /**
-     * Get the role that owns the user.
-     */
-    public function role()
+    // Relations
+    public function account()
     {
-        return $this->belongsTo(Role::class);
+        return $this->belongsTo(Account::class);
     }
 
-    /**
-     * Get the team that owns the user.
-     */
-    public function team()
-    {
-        return $this->belongsTo(Team::class);
-    }
-
-    /**
-     * Get the current team that the user belongs to.
-     */
-    public function currentTeam()
-    {
-        return $this->belongsTo(Team::class, 'current_team_id');
-    }
-
-    /**
-     * Get the leads assigned to the user.
-     */
     public function assignedLeads()
     {
-        return $this->hasMany(Lead::class, 'assigned_to_user_id');
+        return $this->belongsToMany(Lead::class, 'lead_assignments')
+                    ->withPivot('assigned_at', 'assigned_by_user_id', 'notes')
+                    ->withTimestamps();
     }
 
-    /**
-     * Get the leads created by the user.
-     */
-    public function createdLeads()
-    {
-        return $this->hasMany(Lead::class, 'created_by_user_id');
-    }
-
-    /**
-     * Get the tasks assigned to the user.
-     */
-    public function assignedTasks()
-    {
-        return $this->hasMany(Task::class, 'assigned_to_user_id');
-    }
-
-    /**
-     * Get the tasks created by the user.
-     */
-    public function createdTasks()
-    {
-        return $this->hasMany(Task::class, 'created_by_user_id');
-    }
-
-    /**
-     * Get the interactions created by the user.
-     */
     public function interactions()
     {
         return $this->hasMany(Interaction::class);
     }
 
-    /**
-     * Get the integrations for the user.
-     */
-    public function integrations()
+    public function tasks()
     {
-        return $this->hasMany(Integration::class);
+        return $this->hasMany(Task::class);
     }
 
-    /**
-     * Get the AI insights for the user.
-     */
-    public function aiInsights()
+    // Scopes
+    public function scopeActive($query)
     {
-        return $this->hasMany(AiInsight::class);
+        return $query->where('is_active', true);
     }
 
-    /**
-     * Get the automations created by the user.
-     */
-    public function automations()
+    public function scopeByRole($query, $role)
     {
-        return $this->hasMany(Automation::class, 'created_by_user_id');
+        return $query->where('role', $role);
     }
 
-    /**
-     * Get the webhook endpoints created by the user.
-     */
-    public function webhookEndpoints()
+    // Méthodes utilitaires
+    public function hasRole($role)
     {
-        return $this->hasMany(WebhookEndpoint::class, 'created_by_user_id');
+        return $this->role === $role;
+    }
+
+    public function isAdmin()
+    {
+        return $this->role === 'Admin';
+    }
+
+    public function isManager()
+    {
+        return in_array($this->role, ['Admin', 'Manager']);
+    }
+
+    public function canManageLeads()
+    {
+        return in_array($this->role, ['Admin', 'Manager', 'Commercial', 'GestLead']);
+    }
+
+    public function canViewReports()
+    {
+        return in_array($this->role, ['Admin', 'Manager', 'Marketing']);
+    }
+
+    public function getInitialsAttribute()
+    {
+        $words = explode(' ', $this->name);
+        $initials = '';
+        foreach ($words as $word) {
+            $initials .= strtoupper(substr($word, 0, 1));
+        }
+        return $initials;
     }
 }

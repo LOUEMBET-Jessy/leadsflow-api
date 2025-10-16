@@ -1,178 +1,195 @@
 <?php
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\AuthController;
-use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\AccountController;
 use App\Http\Controllers\Api\V1\LeadController;
 use App\Http\Controllers\Api\V1\PipelineController;
+use App\Http\Controllers\Api\V1\StageController;
+use App\Http\Controllers\Api\V1\InteractionController;
 use App\Http\Controllers\Api\V1\TaskController;
-use App\Http\Controllers\Api\V1\SettingsController;
-use App\Http\Controllers\Api\V1\NotificationController;
-use App\Http\Controllers\Api\V1\AiInsightController;
+use App\Http\Controllers\Api\V1\AutomationController;
+use App\Http\Controllers\Api\V1\EmailSequenceController;
+use App\Http\Controllers\Api\V1\SegmentController;
+use App\Http\Controllers\Api\V1\IntegrationController;
+use App\Http\Controllers\Api\V1\DashboardController;
 
-/*
-|--------------------------------------------------------------------------
-| API Routes V1
-|--------------------------------------------------------------------------
-|
-| Here is where you can register API routes for your application. These
-| routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "api" middleware group. Make something great!
-|
-*/
-
-// Public routes (no authentication required)
+// Public routes
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
-    Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('reset-password', [AuthController::class, 'resetPassword']);
 });
 
-// Public lead capture routes (with API key validation)
-Route::prefix('leads/capture')->group(function () {
-    Route::post('web-form', [LeadController::class, 'captureWebForm']);
-    Route::post('email', [LeadController::class, 'captureEmail']);
-});
-
-// Webhook routes (public, with signature validation)
-Route::prefix('webhooks')->group(function () {
-    Route::post('{endpoint}', [\App\Http\Controllers\Api\V1\WebhookController::class, 'handle']);
+// Public lead capture routes
+Route::prefix('leads')->group(function () {
+    Route::post('capture', [LeadController::class, 'captureWebForm']);
 });
 
 // Protected routes (authentication required)
 Route::middleware('auth.simple')->group(function () {
-    
     // Authentication routes
     Route::prefix('auth')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
-        Route::post('refresh', [AuthController::class, 'refresh']);
         Route::get('user', [AuthController::class, 'user']);
-        Route::post('2fa/enable', [AuthController::class, 'enable2FA']);
-        Route::post('2fa/disable', [AuthController::class, 'disable2FA']);
-        Route::post('2fa/verify', [AuthController::class, 'verify2FA']);
+        Route::post('refresh', [AuthController::class, 'refresh']);
+        Route::put('profile', [AuthController::class, 'updateProfile']);
+        Route::put('password', [AuthController::class, 'changePassword']);
+    });
+
+    // Account routes
+    Route::prefix('account')->group(function () {
+        Route::get('/', [AccountController::class, 'show']);
+        Route::put('/', [AccountController::class, 'update']);
+        Route::get('stats', [AccountController::class, 'stats']);
+        Route::get('users', [AccountController::class, 'users']);
+        Route::post('users', [AccountController::class, 'createUser']);
+        Route::put('users/{user}', [AccountController::class, 'updateUser']);
+        Route::delete('users/{user}', [AccountController::class, 'deleteUser']);
     });
 
     // Dashboard routes
     Route::prefix('dashboard')->group(function () {
-        Route::get('summary', [DashboardController::class, 'summary']);
-        Route::get('stats', [DashboardController::class, 'stats']);
-        Route::get('activity', [DashboardController::class, 'activity']);
-        Route::get('funnel', [DashboardController::class, 'funnel']);
-        Route::get('charts', [DashboardController::class, 'charts']);
-        Route::get('recent-leads', [DashboardController::class, 'recentLeads']);
-        Route::get('daily-tasks', [DashboardController::class, 'dailyTasks']);
+        Route::get('overview', [DashboardController::class, 'overview']);
+        Route::get('leads-by-status', [DashboardController::class, 'leadsByStatus']);
+        Route::get('leads-by-source', [DashboardController::class, 'leadsBySource']);
+        Route::get('pipeline-funnel', [DashboardController::class, 'pipelineFunnel']);
+        Route::get('recent-activities', [DashboardController::class, 'recentActivities']);
         Route::get('team-performance', [DashboardController::class, 'teamPerformance']);
-        Route::get('pipeline-overview', [DashboardController::class, 'pipelineOverview']);
-        Route::get('ai-recommendations', [DashboardController::class, 'aiRecommendations']);
+        Route::get('conversion-rates', [DashboardController::class, 'conversionRates']);
+        Route::get('monthly-trends', [DashboardController::class, 'monthlyTrends']);
+        Route::get('top-sources', [DashboardController::class, 'topSources']);
+        Route::get('overdue-tasks', [DashboardController::class, 'overdueTasks']);
     });
 
-    // Lead management routes
+    // Lead routes
     Route::prefix('leads')->group(function () {
         Route::get('/', [LeadController::class, 'index']);
         Route::post('/', [LeadController::class, 'store']);
+        Route::get('stats', [LeadController::class, 'stats']);
         Route::get('{lead}', [LeadController::class, 'show']);
         Route::put('{lead}', [LeadController::class, 'update']);
         Route::delete('{lead}', [LeadController::class, 'destroy']);
-        Route::post('{lead}/status', [LeadController::class, 'updateStatus']);
         Route::post('{lead}/assign', [LeadController::class, 'assign']);
-        Route::post('{lead}/score', [LeadController::class, 'recalculateScore']);
-        Route::post('import', [LeadController::class, 'import']);
-        Route::get('export', [LeadController::class, 'export']);
+        Route::delete('{lead}/unassign/{user}', [LeadController::class, 'unassign']);
+        Route::put('{lead}/score', [LeadController::class, 'updateScore']);
     });
 
-    // Pipeline management routes
+    // Pipeline routes
     Route::prefix('pipelines')->group(function () {
         Route::get('/', [PipelineController::class, 'index']);
         Route::post('/', [PipelineController::class, 'store']);
+        Route::get('{pipeline}/stats', [PipelineController::class, 'stats']);
         Route::get('{pipeline}', [PipelineController::class, 'show']);
         Route::put('{pipeline}', [PipelineController::class, 'update']);
         Route::delete('{pipeline}', [PipelineController::class, 'destroy']);
-        Route::get('{pipeline}/stages', [PipelineController::class, 'stages']);
-        Route::post('{pipeline}/stages', [PipelineController::class, 'addStage']);
-        Route::put('{pipeline}/stages/{stage}', [PipelineController::class, 'updateStage']);
-        Route::delete('{pipeline}/stages/{stage}', [PipelineController::class, 'removeStage']);
+        Route::post('reorder', [PipelineController::class, 'reorder']);
     });
 
-    // Pipeline view routes (Kanban)
-    Route::prefix('pipeline-view')->group(function () {
-        Route::get('{pipeline}', [PipelineController::class, 'pipelineView']);
-        Route::put('lead/{lead}/move', [PipelineController::class, 'moveLead']);
+    // Stage routes
+    Route::prefix('pipelines/{pipeline}/stages')->group(function () {
+        Route::get('/', [StageController::class, 'index']);
+        Route::post('/', [StageController::class, 'store']);
+        Route::post('reorder', [StageController::class, 'reorder']);
     });
 
-    // Task management routes
+    Route::prefix('stages')->group(function () {
+        Route::get('{stage}', [StageController::class, 'show']);
+        Route::put('{stage}', [StageController::class, 'update']);
+        Route::delete('{stage}', [StageController::class, 'destroy']);
+        Route::get('{stage}/stats', [StageController::class, 'stats']);
+        Route::post('{stage}/move-lead', [StageController::class, 'moveLead']);
+    });
+
+    // Interaction routes
+    Route::prefix('interactions')->group(function () {
+        Route::get('/', [InteractionController::class, 'all']);
+        Route::get('recent', [InteractionController::class, 'recent']);
+        Route::get('{interaction}', [InteractionController::class, 'show']);
+        Route::put('{interaction}', [InteractionController::class, 'update']);
+        Route::delete('{interaction}', [InteractionController::class, 'destroy']);
+    });
+
+    Route::prefix('leads/{lead}/interactions')->group(function () {
+        Route::get('/', [InteractionController::class, 'index']);
+        Route::post('/', [InteractionController::class, 'store']);
+        Route::get('stats', [InteractionController::class, 'stats']);
+    });
+
+    // Task routes
     Route::prefix('tasks')->group(function () {
         Route::get('/', [TaskController::class, 'index']);
         Route::post('/', [TaskController::class, 'store']);
+        Route::get('my-tasks', [TaskController::class, 'myTasks']);
+        Route::get('overdue', [TaskController::class, 'overdue']);
+        Route::get('due-today', [TaskController::class, 'dueToday']);
+        Route::get('stats', [TaskController::class, 'stats']);
         Route::get('{task}', [TaskController::class, 'show']);
         Route::put('{task}', [TaskController::class, 'update']);
         Route::delete('{task}', [TaskController::class, 'destroy']);
         Route::post('{task}/complete', [TaskController::class, 'complete']);
-        Route::get('statistics', [TaskController::class, 'statistics']);
-        Route::get('overdue', [TaskController::class, 'overdue']);
-        Route::get('due-today', [TaskController::class, 'dueToday']);
-        Route::get('by-lead/{lead}', [TaskController::class, 'byLead']);
-        Route::post('bulk-update-status', [TaskController::class, 'bulkUpdateStatus']);
-        Route::post('{task}/reminders', [TaskController::class, 'setReminders']);
     });
 
-    // Settings routes
-    Route::prefix('settings')->group(function () {
-        // Profile management
-        Route::prefix('profile')->group(function () {
-            Route::get('/', [SettingsController::class, 'profile']);
-            Route::put('/', [SettingsController::class, 'updateProfile']);
-            Route::put('password', [SettingsController::class, 'changePassword']);
-            Route::put('notifications', [SettingsController::class, 'updateNotifications']);
-        });
-
-        // User management (Admin/Manager only)
-        Route::prefix('users')->group(function () {
-            Route::get('/', [SettingsController::class, 'users']);
-            Route::post('/', [SettingsController::class, 'storeUser']);
-            Route::get('{user}', [SettingsController::class, 'showUser']);
-            Route::put('{user}', [SettingsController::class, 'updateUser']);
-            Route::delete('{user}', [SettingsController::class, 'destroyUser']);
-        });
-
-        // Role and team management
-        Route::get('roles', [SettingsController::class, 'roles']);
-        Route::get('teams', [SettingsController::class, 'teams']);
-
-        // Integration management
-        Route::prefix('integrations')->group(function () {
-            Route::get('/', [SettingsController::class, 'integrations']);
-            Route::post('{service}/connect', [SettingsController::class, 'connectIntegration']);
-            Route::delete('{service}/disconnect', [SettingsController::class, 'disconnectIntegration']);
-            Route::get('{service}/status', [SettingsController::class, 'integrationStatus']);
-        });
-
-        // Data management
-        Route::prefix('data')->group(function () {
-            Route::post('import', [SettingsController::class, 'importData']);
-            Route::get('export', [SettingsController::class, 'exportData']);
-        });
+    // Automation routes
+    Route::prefix('automations')->group(function () {
+        Route::get('/', [AutomationController::class, 'index']);
+        Route::post('/', [AutomationController::class, 'store']);
+        Route::get('trigger-types', [AutomationController::class, 'triggerTypes']);
+        Route::get('action-types', [AutomationController::class, 'actionTypes']);
+        Route::get('stats', [AutomationController::class, 'stats']);
+        Route::get('{automation}', [AutomationController::class, 'show']);
+        Route::put('{automation}', [AutomationController::class, 'update']);
+        Route::delete('{automation}', [AutomationController::class, 'destroy']);
+        Route::post('{automation}/toggle', [AutomationController::class, 'toggle']);
+        Route::post('{automation}/test/{lead}', [AutomationController::class, 'test']);
+        Route::post('{automation}/execute/{lead}', [AutomationController::class, 'execute']);
     });
 
-    // Notification routes
-    Route::prefix('notifications')->group(function () {
-        Route::get('/', [NotificationController::class, 'index']);
-        Route::get('unread-count', [NotificationController::class, 'unreadCount']);
-        Route::put('{notification}/read', [NotificationController::class, 'markAsRead']);
-        Route::put('mark-all-as-read', [NotificationController::class, 'markAllAsRead']);
-        Route::delete('{notification}', [NotificationController::class, 'destroy']);
-        Route::get('statistics', [NotificationController::class, 'statistics']);
+    // Email sequence routes
+    Route::prefix('email-sequences')->group(function () {
+        Route::get('/', [EmailSequenceController::class, 'index']);
+        Route::post('/', [EmailSequenceController::class, 'store']);
+        Route::get('personalization-tags', [EmailSequenceController::class, 'personalizationTags']);
+        Route::get('{sequence}', [EmailSequenceController::class, 'show']);
+        Route::put('{sequence}', [EmailSequenceController::class, 'update']);
+        Route::delete('{sequence}', [EmailSequenceController::class, 'destroy']);
+        Route::get('{sequence}/stats', [EmailSequenceController::class, 'stats']);
+        Route::post('{sequence}/enroll/{lead}', [EmailSequenceController::class, 'enrollLead']);
+        Route::post('{sequence}/steps', [EmailSequenceController::class, 'addStep']);
+        Route::post('{sequence}/steps/reorder', [EmailSequenceController::class, 'reorderSteps']);
     });
 
-    // AI Insights routes
-    Route::prefix('ai-insights')->group(function () {
-        Route::get('/', [AiInsightController::class, 'index']);
-        Route::get('leads/{lead}', [AiInsightController::class, 'leadInsights']);
-        Route::get('global', [AiInsightController::class, 'globalInsights']);
-        Route::put('{insight}/read', [AiInsightController::class, 'markAsRead']);
-        Route::put('mark-all-as-read', [AiInsightController::class, 'markAllAsRead']);
-        Route::get('statistics', [AiInsightController::class, 'statistics']);
-        Route::post('generate/{lead}', [AiInsightController::class, 'generateInsights']);
+    Route::prefix('sequence-steps')->group(function () {
+        Route::put('{step}', [EmailSequenceController::class, 'updateStep']);
+        Route::delete('{step}', [EmailSequenceController::class, 'deleteStep']);
+    });
+
+    // Segment routes
+    Route::prefix('segments')->group(function () {
+        Route::get('/', [SegmentController::class, 'index']);
+        Route::post('/', [SegmentController::class, 'store']);
+        Route::get('field-operators', [SegmentController::class, 'fieldOperators']);
+        Route::get('available-fields', [SegmentController::class, 'availableFields']);
+        Route::get('stats', [SegmentController::class, 'stats']);
+        Route::get('{segment}', [SegmentController::class, 'show']);
+        Route::put('{segment}', [SegmentController::class, 'update']);
+        Route::delete('{segment}', [SegmentController::class, 'destroy']);
+        Route::get('{segment}/leads', [SegmentController::class, 'leads']);
+        Route::post('{segment}/test/{lead}', [SegmentController::class, 'testLead']);
+        Route::post('{segment}/update-count', [SegmentController::class, 'updateCount']);
+    });
+
+    // Integration routes
+    Route::prefix('integrations')->group(function () {
+        Route::get('/', [IntegrationController::class, 'index']);
+        Route::post('/', [IntegrationController::class, 'store']);
+        Route::get('types', [IntegrationController::class, 'types']);
+        Route::get('providers', [IntegrationController::class, 'providers']);
+        Route::get('config-template', [IntegrationController::class, 'configTemplate']);
+        Route::get('stats', [IntegrationController::class, 'stats']);
+        Route::get('{integration}', [IntegrationController::class, 'show']);
+        Route::put('{integration}', [IntegrationController::class, 'update']);
+        Route::delete('{integration}', [IntegrationController::class, 'destroy']);
+        Route::post('{integration}/test', [IntegrationController::class, 'test']);
+        Route::post('{integration}/sync', [IntegrationController::class, 'sync']);
     });
 });

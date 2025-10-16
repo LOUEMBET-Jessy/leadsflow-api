@@ -6,78 +6,109 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Lead\StoreLeadRequest;
 use App\Http\Requests\Api\V1\Lead\UpdateLeadRequest;
 use App\Models\Lead;
-use App\Models\LeadStatus;
-use App\Models\PipelineStage;
-use Illuminate\Http\Request;
+use App\Models\LeadAssignment;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
-use Maatwebsite\Excel\Facades\Excel;
-use App\Exports\LeadsExport;
-use App\Imports\LeadsImport;
+use Illuminate\Http\Request;
 
 class LeadController extends Controller
 {
     /**
-     * Display a listing of leads
+     * Get all leads for the account
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Lead::with(['status', 'assignedTo', 'pipelineStage', 'createdBy']);
+        $query = Lead::where('account_id', $request->user()->account_id)
+            ->with(['currentStage.pipeline', 'assignedUsers', 'interactions', 'tasks']);
 
-        // Apply filters
-        if ($request->has('status_id')) {
-            $query->where('status_id', $request->status_id);
+        // Filtres
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
         }
 
         if ($request->has('source')) {
             $query->where('source', $request->source);
         }
 
-        if ($request->has('priority')) {
-            $query->where('priority', $request->priority);
+        if ($request->has('stage_id')) {
+            $query->where('current_stage_id', $request->stage_id);
         }
 
-        if ($request->has('assigned_to_user_id')) {
-            $query->where('assigned_to_user_id', $request->assigned_to_user_id);
-        }
-
-        if ($request->has('pipeline_stage_id')) {
-            $query->where('pipeline_stage_id', $request->pipeline_stage_id);
+        if ($request->has('assigned_to')) {
+            $query->whereHas('assignedUsers', function ($q) use ($request) {
+                $q->where('user_id', $request->assigned_to);
+            });
         }
 
         if ($request->has('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
-                $q->where('first_name', 'like', "%{$search}%")
-                  ->orWhere('last_name', 'like', "%{$search}%")
+                $q->where('name', 'like', "%{$search}%")
                   ->orWhere('email', 'like', "%{$search}%")
                   ->orWhere('company', 'like', "%{$search}%");
             });
         }
 
-        // Apply sorting
+        // Tri
         $sortBy = $request->get('sort_by', 'created_at');
         $sortOrder = $request->get('sort_order', 'desc');
         $query->orderBy($sortBy, $sortOrder);
 
-        // Pagination
-        $perPage = $request->get('per_page', 15);
-        $leads = $query->paginate($perPage);
+        $leads = $query->paginate($request->get('per_page', 20));
 
         return response()->json($leads);
     }
 
     /**
-     * Store a newly created lead
+     * Get a specific lead
+     */
+    public function show(Request $request, Lead $lead): JsonResponse
+    {
+        // Vérifier que le lead appartient au compte
+        if ($lead->account_id !== $request->user()->account_id) {
+            return response()->json(['message' => 'Lead not found'], 404);
+        }
+
+        $lead->load([
+            'currentStage.pipeline',
+            'assignedUsers',
+            'interactions.user',
+            'tasks.user'
+        ]);
+
+        return response()->json(['lead' => $lead]);
+    }
+
+    /**
+     * Create a new lead
      */
     public function store(StoreLeadRequest $request): JsonResponse
     {
         $lead = Lead::create([
-            ...$request->validated(),
-            'created_by_user_id' => $request->user()->id,
+            'account_id' => $request->user()->account_id,
+            'current_stage_id' => $request->current_stage_id,
+            'name' => $request->name,
+            'email' => $request->email,
+            'phone' => $request->phone,
+            'company' => $request->company,
+            'status' => $request->status ?? 'Nouveau',
+            'source' => $request->source,
+            'location' => $request->location,
+            'score' => $request->score ?? 0,
+            'estimated_value' => $request->estimated_value,
+            'notes' => $request->notes,
+            'custom_fields' => $request->custom_fields,
         ]);
 
-        $lead->load(['status', 'assignedTo', 'pipelineStage', 'createdBy']);
+        // Assigner le lead si spécifié
+        if ($request->has('assigned_user_id')) {
+            $lead->assignedUsers()->attach($request->assigned_user_id, [
+                'assigned_at' => now(),
+                'assigned_by_user_id' => $request->user()->id,
+                'notes' => 'Assigné lors de la création'
+            ]);
+        }
+
+        $lead->load(['currentStage.pipeline', 'assignedUsers']);
 
         return response()->json([
             'message' => 'Lead created successfully',
@@ -86,38 +117,18 @@ class LeadController extends Controller
     }
 
     /**
-     * Display the specified lead
-     */
-    public function show(Lead $lead): JsonResponse
-    {
-        $lead->load([
-            'status', 
-            'assignedTo', 
-            'pipelineStage', 
-            'createdBy',
-            'tasks' => function ($query) {
-                $query->orderBy('due_date', 'asc');
-            },
-            'interactions' => function ($query) {
-                $query->with('user')->orderBy('interaction_date', 'desc');
-            },
-            'aiInsights' => function ($query) {
-                $query->orderBy('created_at', 'desc');
-            }
-        ]);
-
-        return response()->json([
-            'lead' => $lead
-        ]);
-    }
-
-    /**
-     * Update the specified lead
+     * Update a lead
      */
     public function update(UpdateLeadRequest $request, Lead $lead): JsonResponse
     {
+        // Vérifier que le lead appartient au compte
+        if ($lead->account_id !== $request->user()->account_id) {
+            return response()->json(['message' => 'Lead not found'], 404);
+        }
+
         $lead->update($request->validated());
-        $lead->load(['status', 'assignedTo', 'pipelineStage', 'createdBy']);
+
+        $lead->load(['currentStage.pipeline', 'assignedUsers']);
 
         return response()->json([
             'message' => 'Lead updated successfully',
@@ -126,10 +137,15 @@ class LeadController extends Controller
     }
 
     /**
-     * Remove the specified lead
+     * Delete a lead
      */
-    public function destroy(Lead $lead): JsonResponse
+    public function destroy(Request $request, Lead $lead): JsonResponse
     {
+        // Vérifier que le lead appartient au compte
+        if ($lead->account_id !== $request->user()->account_id) {
+            return response()->json(['message' => 'Lead not found'], 404);
+        }
+
         $lead->delete();
 
         return response()->json([
@@ -138,247 +154,165 @@ class LeadController extends Controller
     }
 
     /**
-     * Update lead status
-     */
-    public function updateStatus(Request $request, Lead $lead): JsonResponse
-    {
-        $request->validate([
-            'status_id' => 'required|exists:lead_statuses,id',
-        ]);
-
-        $lead->update(['status_id' => $request->status_id]);
-
-        return response()->json([
-            'message' => 'Lead status updated successfully',
-            'lead' => $lead->load('status'),
-        ]);
-    }
-
-    /**
-     * Assign lead to user
+     * Assign lead to user(s)
      */
     public function assign(Request $request, Lead $lead): JsonResponse
     {
         $request->validate([
-            'assigned_to_user_id' => 'required|exists:users,id',
+            'user_ids' => 'required|array',
+            'user_ids.*' => 'exists:users,id',
+            'notes' => 'nullable|string|max:500',
         ]);
 
-        $lead->update(['assigned_to_user_id' => $request->assigned_to_user_id]);
+        // Vérifier que le lead appartient au compte
+        if ($lead->account_id !== $request->user()->account_id) {
+            return response()->json(['message' => 'Lead not found'], 404);
+        }
+
+        // Vérifier que les utilisateurs appartiennent au même compte
+        $validUserIds = User::where('account_id', $request->user()->account_id)
+            ->whereIn('id', $request->user_ids)
+            ->pluck('id');
+
+        $assignments = [];
+        foreach ($validUserIds as $userId) {
+            $assignments[$userId] = [
+                'assigned_at' => now(),
+                'assigned_by_user_id' => $request->user()->id,
+                'notes' => $request->notes,
+            ];
+        }
+
+        $lead->assignedUsers()->syncWithoutDetaching($assignments);
 
         return response()->json([
             'message' => 'Lead assigned successfully',
-            'lead' => $lead->load('assignedTo'),
+            'lead' => $lead->load('assignedUsers'),
         ]);
     }
 
     /**
-     * Import leads from CSV/Excel
+     * Unassign lead from user
      */
-    public function import(Request $request): JsonResponse
+    public function unassign(Request $request, Lead $lead, User $user): JsonResponse
+    {
+        // Vérifier que le lead appartient au compte
+        if ($lead->account_id !== $request->user()->account_id) {
+            return response()->json(['message' => 'Lead not found'], 404);
+        }
+
+        $lead->assignedUsers()->detach($user->id);
+
+        return response()->json([
+            'message' => 'Lead unassigned successfully',
+        ]);
+    }
+
+    /**
+     * Update lead score
+     */
+    public function updateScore(Request $request, Lead $lead): JsonResponse
     {
         $request->validate([
-            'file' => 'required|file|mimes:csv,xlsx,xls|max:10240', // 10MB max
+            'score' => 'required|integer|min:0|max:100',
+            'reason' => 'nullable|string|max:255',
         ]);
 
-        try {
-            Excel::import(new LeadsImport, $request->file('file'));
-            
-            return response()->json([
-                'message' => 'Leads imported successfully',
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Import failed: ' . $e->getMessage(),
-            ], 422);
+        // Vérifier que le lead appartient au compte
+        if ($lead->account_id !== $request->user()->account_id) {
+            return response()->json(['message' => 'Lead not found'], 404);
         }
+
+        $oldScore = $lead->score;
+        $lead->update(['score' => $request->score]);
+
+        // Créer une interaction pour documenter le changement
+        $lead->interactions()->create([
+            'user_id' => $request->user()->id,
+            'type' => 'Note',
+            'subject' => 'Score mis à jour',
+            'summary' => "Score changé de {$oldScore} à {$request->score}",
+            'details' => $request->reason ?? 'Score mis à jour manuellement',
+            'date' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Lead score updated successfully',
+            'lead' => $lead,
+        ]);
     }
 
     /**
-     * Export leads
+     * Get lead statistics
      */
-    public function export(Request $request): JsonResponse
+    public function stats(Request $request): JsonResponse
     {
-        $format = $request->get('format', 'csv');
-        $filters = $request->only(['status_id', 'source', 'priority', 'assigned_to_user_id']);
+        $accountId = $request->user()->account_id;
 
-        $fileName = 'leads_export_' . now()->format('Y_m_d_H_i_s') . '.' . $format;
+        $stats = [
+            'total' => Lead::where('account_id', $accountId)->count(),
+            'by_status' => Lead::where('account_id', $accountId)
+                ->selectRaw('status, count(*) as count')
+                ->groupBy('status')
+                ->get()
+                ->pluck('count', 'status'),
+            'by_source' => Lead::where('account_id', $accountId)
+                ->selectRaw('source, count(*) as count')
+                ->whereNotNull('source')
+                ->groupBy('source')
+                ->get()
+                ->pluck('count', 'source'),
+            'by_stage' => Lead::where('account_id', $accountId)
+                ->join('stages', 'leads.current_stage_id', '=', 'stages.id')
+                ->selectRaw('stages.name, count(*) as count')
+                ->groupBy('stages.name')
+                ->get()
+                ->pluck('count', 'name'),
+            'recent' => Lead::where('account_id', $accountId)
+                ->where('created_at', '>=', now()->subDays(30))
+                ->count(),
+            'high_score' => Lead::where('account_id', $accountId)
+                ->where('score', '>=', 80)
+                ->count(),
+        ];
 
-        try {
-            Excel::store(new LeadsExport($filters), $fileName, 'public');
-            
-            return response()->json([
-                'message' => 'Export completed successfully',
-                'download_url' => asset('storage/' . $fileName),
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Export failed: ' . $e->getMessage(),
-            ], 422);
-        }
+        return response()->json(['stats' => $stats]);
     }
 
     /**
-     * Capture lead from web form
+     * Capture lead from web form (public endpoint)
      */
     public function captureWebForm(Request $request): JsonResponse
     {
         $request->validate([
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'required|string|max:255',
-            'email' => 'required|email|max:255',
-            'phone' => 'nullable|string|max:20',
+            'name' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255',
+            'phone' => 'nullable|string|max:50',
             'company' => 'nullable|string|max:255',
-            'source' => 'nullable|string|max:255',
-            'custom_fields' => 'nullable|array',
+            'source' => 'nullable|string|max:100',
+            'api_key' => 'required|string',
         ]);
 
-        // Get default status and pipeline stage
-        $defaultStatus = LeadStatus::where('name', 'Nouveau')->first();
-        $defaultStage = PipelineStage::whereHas('pipeline', function ($query) {
-            $query->where('is_default', true);
-        })->orderBy('order')->first();
+        // Vérifier la clé API (à implémenter selon votre logique)
+        $account = Account::where('api_key', $request->api_key)->first();
+        if (!$account) {
+            return response()->json(['message' => 'Invalid API key'], 401);
+        }
 
         $lead = Lead::create([
-            'first_name' => $request->first_name,
-            'last_name' => $request->last_name,
+            'account_id' => $account->id,
+            'name' => $request->name,
             'email' => $request->email,
             'phone' => $request->phone,
             'company' => $request->company,
             'source' => $request->source ?? 'Web Form',
-            'status_id' => $defaultStatus->id,
-            'pipeline_stage_id' => $defaultStage->id ?? null,
-            'custom_fields' => $request->custom_fields,
-            'created_by_user_id' => 1, // System user or first admin
+            'status' => 'Nouveau',
+            'score' => 50, // Score par défaut pour les leads web
         ]);
 
         return response()->json([
             'message' => 'Lead captured successfully',
             'lead_id' => $lead->id,
         ], 201);
-    }
-
-    /**
-     * Capture lead from email
-     */
-    public function captureEmail(Request $request): JsonResponse
-    {
-        $request->validate([
-            'email_content' => 'required|string',
-            'from_email' => 'required|email',
-            'subject' => 'required|string',
-        ]);
-
-        // Parse email content to extract lead information
-        $emailContent = $request->email_content;
-        $fromEmail = $request->from_email;
-        $subject = $request->subject;
-
-        // Simple email parsing (in production, use a more sophisticated parser)
-        $name = $this->extractNameFromEmail($fromEmail);
-        $phone = $this->extractPhoneFromContent($emailContent);
-        $company = $this->extractCompanyFromContent($emailContent);
-
-        $defaultStatus = LeadStatus::where('name', 'Nouveau')->first();
-        $defaultStage = PipelineStage::whereHas('pipeline', function ($query) {
-            $query->where('is_default', true);
-        })->orderBy('order')->first();
-
-        $lead = Lead::create([
-            'first_name' => $name['first_name'],
-            'last_name' => $name['last_name'],
-            'email' => $fromEmail,
-            'phone' => $phone,
-            'company' => $company,
-            'source' => 'Email',
-            'status_id' => $defaultStatus->id,
-            'pipeline_stage_id' => $defaultStage->id ?? null,
-            'notes' => "Captured from email: {$subject}\n\n{$emailContent}",
-            'created_by_user_id' => 1,
-        ]);
-
-        return response()->json([
-            'message' => 'Lead captured from email successfully',
-            'lead_id' => $lead->id,
-        ], 201);
-    }
-
-    /**
-     * Recalculate lead score
-     */
-    public function recalculateScore(Lead $lead): JsonResponse
-    {
-        // Simple scoring algorithm (in production, use AI/ML)
-        $score = 0;
-        
-        // Base score
-        $score += 10;
-        
-        // Company size bonus
-        if ($lead->company_size) {
-            $score += match ($lead->company_size) {
-                'Large' => 20,
-                'Medium' => 15,
-                'Small' => 10,
-                default => 5,
-            };
-        }
-        
-        // Priority bonus
-        $score += match ($lead->priority) {
-            'Hot' => 30,
-            'Warm' => 15,
-            'Cold' => 5,
-            default => 10,
-        };
-        
-        // Recent interaction bonus
-        if ($lead->last_contact_date && $lead->last_contact_date->diffInDays(now()) <= 7) {
-            $score += 10;
-        }
-
-        $lead->update(['score' => $score]);
-
-        return response()->json([
-            'message' => 'Lead score recalculated successfully',
-            'score' => $score,
-        ]);
-    }
-
-    /**
-     * Extract name from email address
-     */
-    private function extractNameFromEmail(string $email): array
-    {
-        $localPart = explode('@', $email)[0];
-        $nameParts = explode('.', $localPart);
-        
-        return [
-            'first_name' => ucfirst($nameParts[0] ?? 'Unknown'),
-            'last_name' => ucfirst($nameParts[1] ?? ''),
-        ];
-    }
-
-    /**
-     * Extract phone number from content
-     */
-    private function extractPhoneFromContent(string $content): ?string
-    {
-        preg_match('/\+?[\d\s\-\(\)]{10,}/', $content, $matches);
-        return $matches[0] ?? null;
-    }
-
-    /**
-     * Extract company from content
-     */
-    private function extractCompanyFromContent(string $content): ?string
-    {
-        // Simple company extraction (in production, use NLP)
-        $lines = explode("\n", $content);
-        foreach ($lines as $line) {
-            if (stripos($line, 'company') !== false || stripos($line, 'entreprise') !== false) {
-                return trim($line);
-            }
-        }
-        return null;
     }
 }

@@ -6,26 +6,22 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        Schema::create('pipelines', function (Blueprint $table) {
+        Schema::create('stages', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('pipeline_id')->constrained()->onDelete('cascade');
             $table->string('name');
             $table->text('description')->nullable();
-            $table->boolean('is_default')->default(false);
-            $table->foreignId('created_by_user_id')->constrained('users')->onDelete('cascade');
+            $table->integer('order');
+            $table->string('color', 7)->default('#3498db'); // Hex color
+            $table->boolean('is_final')->default(false); // Pour les étapes finales (Gagné, Perdu)
             $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('pipelines');
+        Schema::dropIfExists('stages');
     }
 };

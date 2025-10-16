@@ -1,0 +1,1039 @@
+{
+  "info": {
+    "name": "LeadFlow API - Structure ERD Finale",
+    "description": "Collection Postman complète pour l'API LeadFlow basée sur la structure ERD multi-tenant",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "2.0.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🔐 Authentification",
+      "item": [
+        {
+          "name": "Inscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\",\n  \"account_name\": \"Test Company\",\n  \"account_slug\": \"test-company\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Connexion",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('auth_token', response.token);",
+                  "    console.log('Token sauvegardé:', response.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@agl-gabon.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Profil Utilisateur",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/user",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "user"]
+            }
+          }
+        },
+        {
+          "name": "Déconnexion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏢 Compte",
+      "item": [
+        {
+          "name": "Informations du Compte",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/account",
+              "host": ["{{base_url}}"],
+              "path": ["account"]
+            }
+          }
+        },
+        {
+          "name": "Statistiques du Compte",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/account/stats",
+              "host": ["{{base_url}}"],
+              "path": ["account", "stats"]
+            }
+          }
+        },
+        {
+          "name": "Utilisateurs du Compte",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/account/users",
+              "host": ["{{base_url}}"],
+              "path": ["account", "users"]
+            }
+          }
+        },
+        {
+          "name": "Créer un Utilisateur",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Nouvel Utilisateur\",\n  \"email\": \"nouveau@agl-gabon.com\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\",\n  \"role\": \"Commercial\",\n  \"phone\": \"+241 01 23 45 99\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/account/users",
+              "host": ["{{base_url}}"],
+              "path": ["account", "users"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 Dashboard",
+      "item": [
+        {
+          "name": "Vue d'ensemble",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/overview",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "overview"]
+            }
+          }
+        },
+        {
+          "name": "Leads par Statut",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/leads-by-status",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "leads-by-status"]
+            }
+          }
+        },
+        {
+          "name": "Leads par Source",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/leads-by-source",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "leads-by-source"]
+            }
+          }
+        },
+        {
+          "name": "Entonnoir de Pipeline",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/pipeline-funnel",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "pipeline-funnel"]
+            }
+          }
+        },
+        {
+          "name": "Activités Récentes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/recent-activities",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "recent-activities"]
+            }
+          }
+        },
+        {
+          "name": "Performance de l'Équipe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/team-performance",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "team-performance"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👥 Leads",
+      "item": [
+        {
+          "name": "Liste des Leads",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/leads?page=1&per_page=20",
+              "host": ["{{base_url}}"],
+              "path": ["leads"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Créer un Lead",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Nouveau Prospect\",\n  \"email\": \"prospect@example.com\",\n  \"phone\": \"+241 01 23 45 88\",\n  \"company\": \"Entreprise Test\",\n  \"status\": \"Nouveau\",\n  \"source\": \"Site Web\",\n  \"location\": \"Libreville\",\n  \"score\": 75,\n  \"estimated_value\": 50000,\n  \"notes\": \"Prospect intéressé par nos services\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads",
+              "host": ["{{base_url}}"],
+              "path": ["leads"]
+            }
+          }
+        },
+        {
+          "name": "Détails d'un Lead",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/leads/1",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "1"]
+            }
+          }
+        },
+        {
+          "name": "Mettre à jour un Lead",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Prospect Modifié\",\n  \"status\": \"Contacté\",\n  \"score\": 85,\n  \"notes\": \"Lead mis à jour avec nouvelles informations\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads/1",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "1"]
+            }
+          }
+        },
+        {
+          "name": "Assigner un Lead",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_ids\": [2, 3],\n  \"notes\": \"Assigné à l'équipe commerciale\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads/1/assign",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "1", "assign"]
+            }
+          }
+        },
+        {
+          "name": "Mettre à jour le Score",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"score\": 90,\n  \"reason\": \"Lead très intéressé après la démonstration\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads/1/score",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "1", "score"]
+            }
+          }
+        },
+        {
+          "name": "Statistiques des Leads",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/leads/stats",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "stats"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔄 Pipelines",
+      "item": [
+        {
+          "name": "Liste des Pipelines",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pipelines",
+              "host": ["{{base_url}}"],
+              "path": ["pipelines"]
+            }
+          }
+        },
+        {
+          "name": "Créer un Pipeline",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Pipeline Test\",\n  \"description\": \"Pipeline de test pour validation\",\n  \"is_active\": true,\n  \"default_stages\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/pipelines",
+              "host": ["{{base_url}}"],
+              "path": ["pipelines"]
+            }
+          }
+        },
+        {
+          "name": "Détails d'un Pipeline",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pipelines/1",
+              "host": ["{{base_url}}"],
+              "path": ["pipelines", "1"]
+            }
+          }
+        },
+        {
+          "name": "Statistiques d'un Pipeline",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pipelines/1/stats",
+              "host": ["{{base_url}}"],
+              "path": ["pipelines", "1", "stats"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📋 Tâches",
+      "item": [
+        {
+          "name": "Liste des Tâches",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/tasks",
+              "host": ["{{base_url}}"],
+              "path": ["tasks"]
+            }
+          }
+        },
+        {
+          "name": "Mes Tâches",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/tasks/my-tasks",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "my-tasks"]
+            }
+          }
+        },
+        {
+          "name": "Tâches en Retard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/tasks/overdue",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "overdue"]
+            }
+          }
+        },
+        {
+          "name": "Créer une Tâche",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lead_id\": 1,\n  \"title\": \"Appeler le prospect\",\n  \"description\": \"Appeler le prospect pour faire le suivi\",\n  \"priority\": \"high\",\n  \"due_date\": \"2024-12-31 17:00:00\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tasks",
+              "host": ["{{base_url}}"],
+              "path": ["tasks"]
+            }
+          }
+        },
+        {
+          "name": "Compléter une Tâche",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"completion_notes\": \"Tâche terminée avec succès\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tasks/1/complete",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "1", "complete"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💬 Interactions",
+      "item": [
+        {
+          "name": "Liste des Interactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/interactions",
+              "host": ["{{base_url}}"],
+              "path": ["interactions"]
+            }
+          }
+        },
+        {
+          "name": "Interactions d'un Lead",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/leads/1/interactions",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "1", "interactions"]
+            }
+          }
+        },
+        {
+          "name": "Créer une Interaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"Appel\",\n  \"subject\": \"Appel de suivi\",\n  \"summary\": \"Appel effectué pour faire le suivi\",\n  \"details\": \"Discussion de 30 minutes sur les besoins du client\",\n  \"date\": \"2024-10-16 14:30:00\",\n  \"duration\": 30,\n  \"outcome\": \"positive\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads/1/interactions",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "1", "interactions"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🤖 Automatisations",
+      "item": [
+        {
+          "name": "Liste des Automatisations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/automations",
+              "host": ["{{base_url}}"],
+              "path": ["automations"]
+            }
+          }
+        },
+        {
+          "name": "Types de Déclencheurs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/automations/trigger-types",
+              "host": ["{{base_url}}"],
+              "path": ["automations", "trigger-types"]
+            }
+          }
+        },
+        {
+          "name": "Types d'Actions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/automations/action-types",
+              "host": ["{{base_url}}"],
+              "path": ["automations", "action-types"]
+            }
+          }
+        },
+        {
+          "name": "Créer une Automatisation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Assignation Auto Lead Chaud\",\n  \"description\": \"Assigner automatiquement les leads chauds au meilleur commercial\",\n  \"trigger_type\": \"lead_score_updated\",\n  \"action_type\": \"assign_user\",\n  \"parameters\": {\n    \"conditions\": [\n      {\n        \"field\": \"score\",\n        \"operator\": \"greater_than\",\n        \"value\": 80\n      }\n    ],\n    \"action\": {\n      \"user_id\": 2\n    }\n  },\n  \"is_active\": true,\n  \"priority\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/automations",
+              "host": ["{{base_url}}"],
+              "path": ["automations"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📧 Séquences Email",
+      "item": [
+        {
+          "name": "Liste des Séquences",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/email-sequences",
+              "host": ["{{base_url}}"],
+              "path": ["email-sequences"]
+            }
+          }
+        },
+        {
+          "name": "Tags de Personnalisation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/email-sequences/personalization-tags",
+              "host": ["{{base_url}}"],
+              "path": ["email-sequences", "personalization-tags"]
+            }
+          }
+        },
+        {
+          "name": "Créer une Séquence",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Séquence de Bienvenue\",\n  \"description\": \"Séquence d'accueil pour les nouveaux leads\",\n  \"trigger_conditions\": [\n    {\n      \"field\": \"status\",\n      \"operator\": \"equals\",\n      \"value\": \"Nouveau\"\n    }\n  ],\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/email-sequences",
+              "host": ["{{base_url}}"],
+              "path": ["email-sequences"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎯 Segments",
+      "item": [
+        {
+          "name": "Liste des Segments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/segments",
+              "host": ["{{base_url}}"],
+              "path": ["segments"]
+            }
+          }
+        },
+        {
+          "name": "Opérateurs de Champs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/segments/field-operators",
+              "host": ["{{base_url}}"],
+              "path": ["segments", "field-operators"]
+            }
+          }
+        },
+        {
+          "name": "Champs Disponibles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/segments/available-fields",
+              "host": ["{{base_url}}"],
+              "path": ["segments", "available-fields"]
+            }
+          }
+        },
+        {
+          "name": "Créer un Segment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Leads Chauds\",\n  \"description\": \"Leads avec un score élevé et un statut actif\",\n  \"criteria\": [\n    {\n      \"field\": \"score\",\n      \"operator\": \"greater_than\",\n      \"value\": 80\n    },\n    {\n      \"field\": \"status\",\n      \"operator\": \"in\",\n      \"value\": [\"Contacté\", \"Qualification\", \"Négociation\"]\n    }\n  ],\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/segments",
+              "host": ["{{base_url}}"],
+              "path": ["segments"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔌 Intégrations",
+      "item": [
+        {
+          "name": "Liste des Intégrations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/integrations",
+              "host": ["{{base_url}}"],
+              "path": ["integrations"]
+            }
+          }
+        },
+        {
+          "name": "Types d'Intégrations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/integrations/types",
+              "host": ["{{base_url}}"],
+              "path": ["integrations", "types"]
+            }
+          }
+        },
+        {
+          "name": "Providers Disponibles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/integrations/providers",
+              "host": ["{{base_url}}"],
+              "path": ["integrations", "providers"]
+            }
+          }
+        },
+        {
+          "name": "Créer une Intégration",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CRM\",\n  \"name\": \"Intégration Salesforce\",\n  \"provider\": \"salesforce\",\n  \"config\": {\n    \"client_id\": \"your_client_id\",\n    \"client_secret\": \"your_client_secret\",\n    \"instance_url\": \"https://your-instance.salesforce.com\",\n    \"sync_interval\": 3600\n  },\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/integrations",
+              "host": ["{{base_url}}"],
+              "path": ["integrations"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

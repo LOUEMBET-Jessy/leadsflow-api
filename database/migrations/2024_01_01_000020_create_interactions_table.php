@@ -6,27 +6,24 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('interactions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('lead_id')->constrained()->onDelete('cascade');
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            $table->enum('type', ['email_sent', 'email_received', 'call', 'meeting', 'note', 'status_change']);
-            $table->string('summary');
+            $table->enum('type', ['Email', 'Appel', 'Reunion', 'Note', 'SMS', 'Chat'])->default('Note');
+            $table->string('subject')->nullable();
+            $table->text('summary')->nullable();
             $table->longText('details')->nullable();
-            $table->timestamp('interaction_date');
-            $table->json('attachments')->nullable();
+            $table->datetime('date');
+            $table->integer('duration')->nullable(); // En minutes
+            $table->enum('outcome', ['positive', 'neutral', 'negative', 'follow_up_required'])->nullable();
+            $table->json('metadata')->nullable(); // Données additionnelles (fichiers joints, etc.)
             $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('interactions');

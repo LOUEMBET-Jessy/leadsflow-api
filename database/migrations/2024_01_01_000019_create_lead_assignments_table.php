@@ -8,21 +8,21 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('comments', function (Blueprint $table) {
+        Schema::create('lead_assignments', function (Blueprint $table) {
             $table->id();
             $table->foreignId('lead_id')->constrained()->onDelete('cascade');
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            $table->foreignId('parent_id')->nullable()->constrained('comments')->onDelete('cascade'); // For replies
-            $table->text('content');
-            $table->boolean('is_internal')->default(true); // Internal vs visible to client
-            $table->json('mentions')->nullable(); // [@user_id]
+            $table->timestamp('assigned_at')->useCurrent();
+            $table->foreignId('assigned_by_user_id')->nullable()->constrained('users')->onDelete('set null');
+            $table->text('notes')->nullable(); // Raison de l'assignation
             $table->timestamps();
+            
+            $table->unique(['lead_id', 'user_id']);
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('comments');
+        Schema::dropIfExists('lead_assignments');
     }
 };
-
